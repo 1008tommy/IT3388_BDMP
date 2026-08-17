@@ -1456,30 +1456,300 @@ if all(
     )
 
 
-    # ---------------------------------------------------------
-    # SIMPLE SUMMARY BELOW HEATMAP
-    # ---------------------------------------------------------
-
-    st.subheader(
-        "Most Discussed Feedback Theme by Genre"
-    )
-
-
-    for _, row in dominant_themes.iterrows():
-
-        st.write(
-            f"**{row['primary_genre']}** — "
-            f"{row['main_theme']} "
-            f"({row['percentage']:.1f}% of specific feedback)"
-        )
-
-
 else:
 
     st.warning(
         "The game_type, primary_genre or main_theme "
         "column is not available."
     )
+
+
+st.divider()
+
+# =========================================================
+# MODEL TRY-OUT
+# MODERNBERT FEEDBACK THEME CLASSIFIER
+# =========================================================
+
+st.header("Try the Feedback Theme Classifier")
+
+st.write(
+    """
+    Enter a Steam-style review below to see which feedback themes
+    are identified by the tuned ModernBERT multi-label classifier.
+    A review can contain more than one feedback theme.
+    """
+)
+
+
+# ---------------------------------------------------------
+# MODEL LOCATION
+# ---------------------------------------------------------
+
+MODEL_RUN_ID = "0bf150ccb69f499685bd83b0bdad9019"
+
+MODEL_URI = (
+    f"runs:/{MODEL_RUN_ID}/"
+    "modernbert_expanded_tuned"
+)
+
+
+# ---------------------------------------------------------
+# LOAD MODEL ONCE
+#
+# cache_resource prevents Streamlit from loading the large
+# ModernBERT model again every time the page reruns.
+# ---------------------------------------------------------
+
+@st.cache_resource
+def load_review_classifier():
+
+    import mlflow.transformers
+
+    classifier = mlflow.transformers.load_model(
+        MODEL_URI,
+        return_type="pipeline"
+    )
+
+    return classifier
+
+
+# ---------------------------------------------------------
+# LABEL MAPPING
+#
+# IMPORTANT:
+# Replace these with the EXACT label order used during
+# your ModernBERT training.
+#
+# Do NOT guess the order.
+# ---------------------------------------------------------
+
+LABEL_MAPPING = {
+    "LABEL_0": "LABEL_0",
+    "LABEL_1": "LABEL_1",
+    "LABEL_2": "LABEL_2",
+    "LABEL_3": "LABEL_3",
+    "LABEL_4": "LABEL_4",
+    "LABEL_5": "LABEL_5",
+    "LABEL_6": "LABEL_6",
+    "LABEL_7": "LABEL_7"
+}
+
+
+# ---------------------------------------------------------
+# THRESHOLD
+#
+# Replace 0.50 if your final tuned model used a different
+# prediction threshold.
+# ---------------------------------------------------------
+
+PREDICTION_THRESHOLD = 0.50
+
+
+# ---------------------------------------------------------
+# TEXT INPUT
+# ---------------------------------------------------------
+
+review_input = st.text_area(
+    "Enter a Steam review",
+    placeholder=(
+        "Example: The combat is really fun, but the game "
+        "keeps crashing and the frame rate drops during fights."
+    ),
+    height=140
+)
+
+
+# ---------------------------------------------------------
+# ANALYSE BUTTON
+# ---------------------------------------------------------
+
+if st.button(
+    "Analyse Review",
+    type="primary"
+):
+
+    # ---------------------------------------------------------
+    # VALIDATE INPUT
+    # ---------------------------------------------------------
+
+    if not review_input.strip():
+
+        st.warning(
+            "Please enter a review before analysing it."
+        )
+
+    else:
+
+        try:
+
+            # ---------------------------------------------------------
+            # LOAD MODEL
+            # ---------------------------------------------------------
+
+            with st.spinner(
+                "Analysing review with ModernBERT..."
+            ):
+
+                classifier = load_review_classifier()
+
+
+                # ---------------------------------------------------------
+                # PREDICT ALL THEME SCORES
+                # ---------------------------------------------------------
+
+                predictions = classifier(
+                    review_input.strip(),
+                    top_k=None,
+                    function_to_apply="sigmoid"
+                )
+
+
+            # ---------------------------------------------------------
+            # NORMALISE RETURN FORMAT
+            # ---------------------------------------------------------
+
+            # Some Transformers pipeline versions can return
+            # a nested list for one review.
+
+            if (
+                isinstance(predictions, list)
+                and len(predictions) > 0
+                and isinstance(predictions[0], list)
+            ):
+                predictions = predictions[0]
+
+
+            # ---------------------------------------------------------
+            # SORT BY SCORE
+            # ---------------------------------------------------------
+
+            predictions = sorted(
+                predictions,
+                key=lambda x: x["score"],
+                reverse=True
+            )
+
+
+            # ---------------------------------------------------------
+            # ADD HUMAN-READABLE LABEL
+            # ---------------------------------------------------------
+
+            processed_predictions = []
+
+            for prediction in predictions:
+
+                raw_label = prediction["label"]
+
+                theme_name = LABEL_MAPPING.get(
+                    raw_label,
+                    raw_label
+                )
+
+                processed_predictions.append({
+                    "theme": theme_name,
+                    "score": float(
+                        prediction["score"]
+                    )
+                })
+
+
+            # ---------------------------------------------------------
+            # FILTER USING THRESHOLD
+            # ---------------------------------------------------------
+
+            detected_themes = [
+                prediction
+                for prediction
+                in processed_predictions
+                if prediction["score"]
+                >= PREDICTION_THRESHOLD
+            ]
+
+
+            # ---------------------------------------------------------
+            # RESULTS
+            # ---------------------------------------------------------
+
+            st.subheader(
+                "Detected Feedback Themes"
+            )
+
+
+            if detected_themes:
+
+                for prediction in detected_themes:
+
+                    st.markdown(
+                        f"**{prediction['theme']}**"
+                    )
+
+                    st.progress(
+                        min(
+                            float(
+                                prediction["score"]
+                            ),
+                            1.0
+                        )
+                    )
+
+                    st.caption(
+                        f"Model score: "
+                        f"{prediction['score'] * 100:.1f}%"
+                    )
+
+            else:
+
+                st.info(
+                    "No specific feedback theme exceeded "
+                    f"the {PREDICTION_THRESHOLD:.0%} "
+                    "prediction threshold."
+                )
+
+
+            # ---------------------------------------------------------
+            # OPTIONAL:
+            # SHOW ALL MODEL SCORES
+            # ---------------------------------------------------------
+
+            with st.expander(
+                "View all theme scores"
+            ):
+
+                score_df = pd.DataFrame(
+                    processed_predictions
+                )
+
+                score_df["score"] = (
+                    score_df["score"]
+                    * 100
+                )
+
+                score_df = score_df.rename(
+                    columns={
+                        "theme":
+                            "Feedback Theme",
+
+                        "score":
+                            "Model Score (%)"
+                    }
+                )
+
+                st.dataframe(
+                    score_df,
+                    hide_index=True,
+                    width="stretch"
+                )
+
+
+        except Exception as e:
+
+            st.error(
+                "The feedback classifier could not "
+                "be loaded or executed."
+            )
+
+            st.exception(e)
 
 
 st.divider()
