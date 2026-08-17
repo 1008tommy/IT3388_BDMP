@@ -60,6 +60,11 @@ def get_connection():
         server_hostname=server_hostname,
         http_path=http_path,
         credentials_provider=lambda: cfg.authenticate,
+
+        # IMPORTANT:
+        # Fetch results through Databricks instead of CloudFetch
+        use_cloud_fetch=False,
+
         _use_arrow_native_complex_types=False
     )
 
