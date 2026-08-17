@@ -12,3 +12,7 @@ xgboost
 lightgbm
 pycaret==3.3.2
 shap==0.45.0
+mlflow
+torch==2.9.0
+transformers==4.57.1
+accelerate==1.11.0
