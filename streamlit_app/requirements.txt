@@ -10,3 +10,5 @@ mlflow
 scikit-learn
 xgboost
 lightgbm
+pycaret==3.3.2
+shap==0.45.0
