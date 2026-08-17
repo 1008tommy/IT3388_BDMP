@@ -3,3 +3,8 @@ pandas
 plotly
 databricks-sdk
 databricks-sql-connector[pyarrow]
+numpy
+matplotlib
+seaborn
+mlflow
+scikit-learn
