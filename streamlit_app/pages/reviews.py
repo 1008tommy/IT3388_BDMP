@@ -1668,7 +1668,7 @@ def review_classifier_section():
 
 
     # ---------------------------------------------------------
-    # SESSION STATE FOR RESULTS
+    # SESSION STATE
     # ---------------------------------------------------------
 
     if "review_predictions" not in st.session_state:
@@ -1679,38 +1679,36 @@ def review_classifier_section():
 
 
     # ---------------------------------------------------------
-    # REVIEW INPUT
-    #
-    # Always remains visible even after prediction.
+    # REVIEW FORM
     # ---------------------------------------------------------
 
-    review_input = st.text_area(
-        "Enter a Steam review",
-        key="review_classifier_input",
-        placeholder=(
-            "Example: The combat is really fun, but the game "
-            "keeps crashing and the frame rate drops during fights."
-        ),
-        height=140
-    )
-
-
-    # ---------------------------------------------------------
-    # BUTTON
-    # ---------------------------------------------------------
-
-    if st.button(
-        "Analyse Review",
-        type="primary",
-        use_container_width=False
+    with st.form(
+        "review_classifier_form",
+        clear_on_submit=True
     ):
 
+        review_input = st.text_area(
+            "Enter a Steam review",
+            placeholder=(
+                "Example: The combat is really fun, but the game "
+                "keeps crashing and the frame rate drops during fights."
+            ),
+            height=140
+        )
+
+        analyse_button = st.form_submit_button(
+            "Analyse Review",
+            type="primary"
+        )
+
+
+    # ---------------------------------------------------------
+    # PREDICT
+    # ---------------------------------------------------------
+
+    if analyse_button:
+
         review_text = review_input.strip()
-
-
-        # -----------------------------------------------------
-        # VALIDATE
-        # -----------------------------------------------------
 
         if not review_text:
 
@@ -1732,7 +1730,6 @@ def review_classifier_section():
                     )
 
 
-                # Save latest prediction
                 st.session_state.review_predictions = (
                     predictions
                 )
@@ -1752,12 +1749,9 @@ def review_classifier_section():
                 st.exception(e)
 
 
-    # =========================================================
+    # ---------------------------------------------------------
     # DISPLAY LATEST RESULT
-    #
-    # This is separate from the button so the result remains
-    # available while the user enters another review.
-    # =========================================================
+    # ---------------------------------------------------------
 
     predictions = (
         st.session_state.review_predictions
@@ -1767,15 +1761,9 @@ def review_classifier_section():
     if predictions is not None:
 
         detected_themes = [
-
             prediction
-
             for prediction in predictions
-
-            if (
-                prediction["score"]
-                >= PREDICTION_THRESHOLD
-            )
+            if prediction["score"] >= PREDICTION_THRESHOLD
         ]
 
 
@@ -1783,10 +1771,6 @@ def review_classifier_section():
             "Detected Feedback Themes"
         )
 
-
-        # -----------------------------------------------------
-        # DETECTED THEMES
-        # -----------------------------------------------------
 
         if detected_themes:
 
@@ -1808,7 +1792,6 @@ def review_classifier_section():
                     f"{prediction['score'] * 100:.1f}%"
                 )
 
-
         else:
 
             st.info(
@@ -1817,10 +1800,6 @@ def review_classifier_section():
                 "prediction threshold."
             )
 
-
-        # -----------------------------------------------------
-        # ALL SCORES
-        # -----------------------------------------------------
 
         with st.expander(
             "View all theme scores"
@@ -1831,17 +1810,13 @@ def review_classifier_section():
             )
 
             score_df["score"] = (
-                score_df["score"]
-                * 100
+                score_df["score"] * 100
             )
 
             score_df = score_df.rename(
                 columns={
-                    "theme":
-                        "Feedback Theme",
-
-                    "score":
-                        "Model Score (%)"
+                    "theme": "Feedback Theme",
+                    "score": "Model Score (%)"
                 }
             )
 
