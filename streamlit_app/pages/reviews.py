@@ -1465,28 +1465,19 @@ else:
 
 
 st.divider()
-
 # =========================================================
 # MODEL TRY-OUT
 # MODERNBERT FEEDBACK THEME CLASSIFIER
 # =========================================================
 
-st.header("Try the Feedback Theme Classifier")
-
-st.write(
-    """
-    Enter a Steam-style review below to see which feedback themes
-    are identified by the tuned ModernBERT multi-label classifier.
-    A review can contain more than one feedback theme.
-    """
-)
-
-
-# ---------------------------------------------------------
-# MODEL LOCATION
-# ---------------------------------------------------------
-
+import torch
 import mlflow
+import mlflow.transformers
+
+
+# ---------------------------------------------------------
+# MODEL SETTINGS
+# ---------------------------------------------------------
 
 MODEL_RUN_ID = "0bf150ccb69f499685bd83b0bdad9019"
 
@@ -1495,194 +1486,267 @@ MODEL_URI = (
     "modernbert_expanded_tuned"
 )
 
+PREDICTION_THRESHOLD = 0.50
+MAX_LENGTH = 256
+
 
 # ---------------------------------------------------------
-# IMPORTANT:
-# USE DATABRICKS-HOSTED MLFLOW TRACKING SERVER
+# EXACT LABEL ORDER USED DURING TRAINING
+# ---------------------------------------------------------
+
+SPECIFIC_THEMES = [
+    "Gameplay and balance",
+    "Story and characters",
+    "Content and replayability",
+    "User interface and usability",
+    "Technical performance and bugs",
+    "Pricing and value",
+    "Multiplayer and online",
+    "Graphics, art and audio"
+]
+
+
+# ---------------------------------------------------------
+# USE DATABRICKS MLFLOW
 # ---------------------------------------------------------
 
 mlflow.set_tracking_uri("databricks")
 
 
 # ---------------------------------------------------------
-# LOAD MODEL ONCE
+# LOAD MODEL + TOKENIZER ONCE
+#
+# Using components instead of the Transformers pipeline
+# lets us perform direct inference with less processing.
 # ---------------------------------------------------------
 
-@st.cache_resource
-def load_review_classifier():
+@st.cache_resource(show_spinner=False)
+def load_review_classifier(model_uri):
 
-    import mlflow
-    import mlflow.transformers
-
-    # Explicitly ensure MLflow is looking at Databricks,
-    # not a local MLflow database.
     mlflow.set_tracking_uri("databricks")
 
-    classifier = mlflow.transformers.load_model(
-        MODEL_URI,
-        return_type="pipeline"
+    components = mlflow.transformers.load_model(
+        model_uri,
+        return_type="components"
     )
 
-    return classifier
+    model = components["model"]
+    tokenizer = components["tokenizer"]
+
+    # Use GPU automatically if the app has one
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "cpu"
+    )
+
+    model = model.to(device)
+    model.eval()
+
+    # Give the model human-readable labels in memory
+    model.config.id2label = {
+        i: theme
+        for i, theme in enumerate(SPECIFIC_THEMES)
+    }
+
+    model.config.label2id = {
+        theme: i
+        for i, theme in enumerate(SPECIFIC_THEMES)
+    }
+
+    return model, tokenizer, device
 
 
 # ---------------------------------------------------------
-# LABEL MAPPING
+# PREDICTION FUNCTION
 #
-# IMPORTANT:
-# Replace these with the EXACT label order used during
-# your ModernBERT training.
-#
-# Do NOT guess the order.
+# Cache predictions too, so entering the exact same review
+# again returns immediately without another model forward pass.
 # ---------------------------------------------------------
 
-LABEL_MAPPING = {
-    "LABEL_0": "LABEL_0",
-    "LABEL_1": "LABEL_1",
-    "LABEL_2": "LABEL_2",
-    "LABEL_3": "LABEL_3",
-    "LABEL_4": "LABEL_4",
-    "LABEL_5": "LABEL_5",
-    "LABEL_6": "LABEL_6",
-    "LABEL_7": "LABEL_7"
-}
-
-
-# ---------------------------------------------------------
-# THRESHOLD
-#
-# Replace 0.50 if your final tuned model used a different
-# prediction threshold.
-# ---------------------------------------------------------
-
-PREDICTION_THRESHOLD = 0.50
-
-
-# ---------------------------------------------------------
-# TEXT INPUT
-# ---------------------------------------------------------
-
-review_input = st.text_area(
-    "Enter a Steam review",
-    key="review_classifier_input",
-    placeholder=(
-        "Example: The combat is really fun, but the game "
-        "keeps crashing and the frame rate drops during fights."
-    ),
-    height=140
+@st.cache_data(
+    show_spinner=False,
+    max_entries=100
 )
-
-
-# ---------------------------------------------------------
-# ANALYSE BUTTON
-# ---------------------------------------------------------
-
-if st.button(
-    "Analyse Review",
-    type="primary"
+def predict_review(
+    review_text,
+    model_uri
 ):
 
-    # ---------------------------------------------------------
-    # VALIDATE INPUT
-    # ---------------------------------------------------------
+    model, tokenizer, device = (
+        load_review_classifier(
+            model_uri
+        )
+    )
 
-    if not review_input.strip():
+    # Same maximum sequence length used during modelling
+    inputs = tokenizer(
+        review_text,
+        truncation=True,
+        padding=False,
+        max_length=MAX_LENGTH,
+        return_tensors="pt"
+    )
 
-        st.warning(
-            "Please enter a review before analysing it."
+    inputs = {
+        key: value.to(device)
+        for key, value in inputs.items()
+    }
+
+    # Faster inference:
+    # no gradients are required during prediction
+    with torch.inference_mode():
+
+        logits = model(
+            **inputs
+        ).logits
+
+        probabilities = (
+            torch.sigmoid(logits)
+            [0]
+            .float()
+            .cpu()
+            .tolist()
         )
 
-    else:
+
+    # Safety check
+    if len(probabilities) != len(SPECIFIC_THEMES):
+
+        raise ValueError(
+            "Model output size does not match "
+            "the 8 expected feedback themes."
+        )
+
+
+    # Directly associate each output position
+    # with its actual feedback theme
+    predictions = [
+
+        {
+            "theme": theme,
+            "score": float(score)
+        }
+
+        for theme, score
+        in zip(
+            SPECIFIC_THEMES,
+            probabilities
+        )
+    ]
+
+
+    # Highest probability first
+    predictions = sorted(
+        predictions,
+        key=lambda x: x["score"],
+        reverse=True
+    )
+
+    return predictions
+
+
+# =========================================================
+# CLASSIFIER UI
+#
+# Fragment means clicking Analyse Review only reruns
+# this section instead of rerunning the entire dashboard.
+# =========================================================
+
+@st.fragment
+def review_classifier_section():
+
+    st.header(
+        "Try the Feedback Theme Classifier"
+    )
+
+    st.write(
+        """
+        Enter a Steam-style review below to see which feedback
+        themes are identified by the tuned ModernBERT multi-label
+        classifier. A review can contain more than one feedback
+        theme.
+        """
+    )
+
+
+    # ---------------------------------------------------------
+    # TEXT INPUT
+    # ---------------------------------------------------------
+
+    review_input = st.text_area(
+        "Enter a Steam review",
+        key="review_classifier_input",
+        placeholder=(
+            "Example: The combat is really fun, "
+            "but the game keeps crashing and "
+            "the frame rate drops during fights."
+        ),
+        height=140
+    )
+
+
+    # ---------------------------------------------------------
+    # ANALYSE BUTTON
+    # ---------------------------------------------------------
+
+    if st.button(
+        "Analyse Review",
+        type="primary"
+    ):
+
+        review_text = review_input.strip()
+
+
+        # -----------------------------------------------------
+        # VALIDATE INPUT
+        # -----------------------------------------------------
+
+        if not review_text:
+
+            st.warning(
+                "Please enter a review before analysing it."
+            )
+
+            return
+
 
         try:
 
-            # ---------------------------------------------------------
-            # LOAD MODEL
-            # ---------------------------------------------------------
+            # -------------------------------------------------
+            # PREDICT
+            # -------------------------------------------------
 
             with st.spinner(
                 "Analysing review with ModernBERT..."
             ):
 
-                classifier = load_review_classifier()
-
-
-                # ---------------------------------------------------------
-                # PREDICT ALL THEME SCORES
-                # ---------------------------------------------------------
-
-                predictions = classifier(
-                    review_input.strip(),
-                    top_k=None,
-                    function_to_apply="sigmoid"
+                predictions = predict_review(
+                    review_text,
+                    MODEL_URI
                 )
 
 
-            # ---------------------------------------------------------
-            # NORMALISE RETURN FORMAT
-            # ---------------------------------------------------------
-
-            # Some Transformers pipeline versions can return
-            # a nested list for one review.
-
-            if (
-                isinstance(predictions, list)
-                and len(predictions) > 0
-                and isinstance(predictions[0], list)
-            ):
-                predictions = predictions[0]
-
-
-            # ---------------------------------------------------------
-            # SORT BY SCORE
-            # ---------------------------------------------------------
-
-            predictions = sorted(
-                predictions,
-                key=lambda x: x["score"],
-                reverse=True
-            )
-
-
-            # ---------------------------------------------------------
-            # ADD HUMAN-READABLE LABEL
-            # ---------------------------------------------------------
-
-            processed_predictions = []
-
-            for prediction in predictions:
-
-                raw_label = prediction["label"]
-
-                theme_name = LABEL_MAPPING.get(
-                    raw_label,
-                    raw_label
-                )
-
-                processed_predictions.append({
-                    "theme": theme_name,
-                    "score": float(
-                        prediction["score"]
-                    )
-                })
-
-
-            # ---------------------------------------------------------
-            # FILTER USING THRESHOLD
-            # ---------------------------------------------------------
+            # -------------------------------------------------
+            # DETECT THEMES ABOVE FINAL THRESHOLD
+            # -------------------------------------------------
 
             detected_themes = [
+
                 prediction
-                for prediction
-                in processed_predictions
-                if prediction["score"]
-                >= PREDICTION_THRESHOLD
+
+                for prediction in predictions
+
+                if (
+                    prediction["score"]
+                    >= PREDICTION_THRESHOLD
+                )
             ]
 
 
-            # ---------------------------------------------------------
+            # -------------------------------------------------
             # RESULTS
-            # ---------------------------------------------------------
+            # -------------------------------------------------
 
             st.subheader(
                 "Detected Feedback Themes"
@@ -1694,22 +1758,21 @@ if st.button(
                 for prediction in detected_themes:
 
                     st.markdown(
-                        f"**{prediction['theme']}**"
+                        f"### {prediction['theme']}"
                     )
 
                     st.progress(
                         min(
-                            float(
-                                prediction["score"]
-                            ),
+                            prediction["score"],
                             1.0
                         )
                     )
 
                     st.caption(
-                        f"Model score: "
+                        "Model score: "
                         f"{prediction['score'] * 100:.1f}%"
                     )
+
 
             else:
 
@@ -1720,17 +1783,16 @@ if st.button(
                 )
 
 
-            # ---------------------------------------------------------
-            # OPTIONAL:
-            # SHOW ALL MODEL SCORES
-            # ---------------------------------------------------------
+            # -------------------------------------------------
+            # ALL THEME SCORES
+            # -------------------------------------------------
 
             with st.expander(
                 "View all theme scores"
             ):
 
                 score_df = pd.DataFrame(
-                    processed_predictions
+                    predictions
                 )
 
                 score_df["score"] = (
@@ -1763,6 +1825,10 @@ if st.button(
             )
 
             st.exception(e)
+
+
+# RUN CLASSIFIER SECTION
+review_classifier_section()
 
 
 st.divider()
