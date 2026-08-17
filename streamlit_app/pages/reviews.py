@@ -413,200 +413,419 @@ theme_summary["theme_share"] = (
 )
 
 
-# ---------------------------------------------------------
-# ADD THEME SHARE TO LABEL
-#
-# Example:
-# Gameplay and balance (38.4% of feedback)
-# ---------------------------------------------------------
+# =========================================================
+# CHART 1
+# INDIE GENRE FEEDBACK THEMES
+# 100% POSITIVE VS NEGATIVE STACKED BAR
+# =========================================================
 
-theme_summary["theme_label"] = (
-    theme_summary["main_theme"]
-    + " ("
-    + theme_summary["theme_share"].map(
-        lambda x: f"{x:.1f}%"
-    )
-    + ")"
+st.header("What Feedback Themes Should Indie Developers Look Out For?")
+
+st.write(
+    """
+    Select an indie game genre to see the specific feedback themes
+    most commonly discussed by players. General positive and negative
+    feedback are excluded so that the analysis focuses on more
+    actionable areas.
+
+    Each bar represents one feedback theme and adds up to 100%,
+    showing the proportion of positive versus negative reviews
+    within that theme.
+    """
 )
 
 
-# Add label back into chart dataframe
-theme_sentiment_counts = (
-    theme_sentiment_counts
-    .merge(
-        theme_summary[
-            [
-                "main_theme",
-                "theme_label",
+# ---------------------------------------------------------
+# GENRES USED IN MODELLING
+# ---------------------------------------------------------
+
+MODEL_GENRES = [
+    "Action",
+    "Adventure",
+    "Casual",
+    "Simulation",
+    "Strategy",
+    "RPG"
+]
+
+
+# ---------------------------------------------------------
+# CHECK REQUIRED COLUMNS
+# ---------------------------------------------------------
+
+required_chart_columns = [
+    "primary_genre",
+    "game_type",
+    "main_theme",
+    "recommendation_polarity"
+]
+
+
+if all(
+    column in df.columns
+    for column in required_chart_columns
+):
+
+    # ---------------------------------------------------------
+    # KEEP ONLY INDIE REVIEWS FROM MODELLED GENRES
+    # ---------------------------------------------------------
+
+    indie_genre_df = df[
+        (df["game_type"] == "Indie")
+        & (df["primary_genre"].isin(MODEL_GENRES))
+        & (df["main_theme"].notna())
+        & (
+            df["recommendation_polarity"].isin(
+                ["Positive", "Negative"]
+            )
+        )
+    ].copy()
+
+
+    # ---------------------------------------------------------
+    # REMOVE GENERAL FEEDBACK
+    # ---------------------------------------------------------
+
+    general_themes = [
+        "General positive feedback",
+        "General negative feedback"
+    ]
+
+
+    indie_genre_df = indie_genre_df[
+        ~indie_genre_df["main_theme"].isin(
+            general_themes
+        )
+    ].copy()
+
+
+    # ---------------------------------------------------------
+    # AVAILABLE GENRES
+    # ---------------------------------------------------------
+
+    available_genres = [
+        genre
+        for genre in MODEL_GENRES
+        if genre in indie_genre_df[
+            "primary_genre"
+        ].unique()
+    ]
+
+
+    if len(available_genres) > 0:
+
+        # ---------------------------------------------------------
+        # GENRE SELECTOR
+        # ---------------------------------------------------------
+
+        selected_genre = st.selectbox(
+            "Select an indie genre",
+            available_genres,
+            key="chart1_genre"
+        )
+
+
+        # ---------------------------------------------------------
+        # FILTER TO SELECTED GENRE
+        # ---------------------------------------------------------
+
+        selected_genre_df = indie_genre_df[
+            indie_genre_df["primary_genre"]
+            == selected_genre
+        ].copy()
+
+
+        # ---------------------------------------------------------
+        # COUNT POSITIVE / NEGATIVE FOR EACH THEME
+        # ---------------------------------------------------------
+
+        theme_sentiment_counts = (
+            selected_genre_df
+            .groupby(
+                [
+                    "main_theme",
+                    "recommendation_polarity"
+                ]
+            )
+            .size()
+            .reset_index(
+                name="review_count"
+            )
+        )
+
+
+        # ---------------------------------------------------------
+        # TOTAL REVIEWS WITHIN EACH THEME
+        # ---------------------------------------------------------
+
+        theme_sentiment_counts["theme_total"] = (
+            theme_sentiment_counts
+            .groupby("main_theme")[
+                "review_count"
+            ]
+            .transform("sum")
+        )
+
+
+        # ---------------------------------------------------------
+        # POSITIVE / NEGATIVE % WITHIN EACH THEME
+        #
+        # EACH BAR = 100%
+        # ---------------------------------------------------------
+
+        theme_sentiment_counts[
+            "within_theme_percentage"
+        ] = (
+            theme_sentiment_counts[
+                "review_count"
+            ]
+            / theme_sentiment_counts[
+                "theme_total"
+            ]
+            * 100
+        )
+
+
+        # ---------------------------------------------------------
+        # CALCULATE HOW COMMON EACH THEME IS OVERALL
+        # ---------------------------------------------------------
+
+        specific_feedback_total = len(
+            selected_genre_df
+        )
+
+
+        theme_summary = (
+            theme_sentiment_counts
+            .groupby("main_theme")
+            .agg(
+                theme_total=(
+                    "review_count",
+                    "sum"
+                )
+            )
+            .reset_index()
+        )
+
+
+        theme_summary["theme_share"] = (
+            theme_summary["theme_total"]
+            / specific_feedback_total
+            * 100
+        )
+
+
+        # ---------------------------------------------------------
+        # CREATE Y-AXIS LABEL
+        #
+        # Example:
+        # Gameplay and balance (38.4%)
+        # ---------------------------------------------------------
+
+        theme_summary["theme_label"] = (
+            theme_summary["main_theme"]
+            + " ("
+            + theme_summary[
+                "theme_share"
+            ].map(
+                lambda x: f"{x:.1f}%"
+            )
+            + ")"
+        )
+
+
+        # ---------------------------------------------------------
+        # ADD THEME SHARE/LABEL BACK TO CHART DATA
+        # ---------------------------------------------------------
+
+        theme_sentiment_counts = (
+            theme_sentiment_counts
+            .merge(
+                theme_summary[
+                    [
+                        "main_theme",
+                        "theme_share",
+                        "theme_label"
+                    ]
+                ],
+                on="main_theme",
+                how="left"
+            )
+        )
+
+
+        # ---------------------------------------------------------
+        # SORT THEMES BY FREQUENCY
+        # Largest theme appears at top
+        # ---------------------------------------------------------
+
+        theme_order = (
+            theme_summary
+            .sort_values(
+                "theme_total",
+                ascending=True
+            )["theme_label"]
+            .tolist()
+        )
+
+
+        # ---------------------------------------------------------
+        # CAPTION
+        # ---------------------------------------------------------
+
+        st.caption(
+            f"Based on {specific_feedback_total:,} reviews containing "
+            f"a specific feedback theme for Indie {selected_genre} games. "
+            f"General positive and negative feedback are excluded. "
+            f"Each bar adds up to 100%."
+        )
+
+
+        # ---------------------------------------------------------
+        # CHART
+        # ---------------------------------------------------------
+
+        fig_theme = px.bar(
+            theme_sentiment_counts,
+
+            x="within_theme_percentage",
+            y="theme_label",
+
+            color="recommendation_polarity",
+
+            orientation="h",
+
+            barmode="stack",
+
+            text="within_theme_percentage",
+
+            category_orders={
+                "theme_label": theme_order,
+                "recommendation_polarity": [
+                    "Positive",
+                    "Negative"
+                ]
+            },
+
+            color_discrete_map={
+                "Positive": "#2ECC71",
+                "Negative": "#E74C3C"
+            },
+
+            title=(
+                f"Positive vs Negative Feedback by Theme "
+                f"for Indie {selected_genre} Games"
+            ),
+
+            labels={
+                "within_theme_percentage":
+                    "% Within Theme",
+
+                "theme_label":
+                    "Feedback Theme",
+
+                "recommendation_polarity":
+                    "Recommendation"
+            },
+
+            custom_data=[
+                "review_count",
                 "theme_share"
             ]
-        ],
-        on="main_theme",
-        how="left"
+        )
+
+
+        # ---------------------------------------------------------
+        # CENTRE % INSIDE EACH GREEN / RED SECTION
+        # ---------------------------------------------------------
+
+        fig_theme.update_traces(
+
+            texttemplate="%{text:.1f}%",
+
+            textposition="inside",
+
+            insidetextanchor="middle",
+
+            textfont=dict(
+                color="white",
+                size=13
+            ),
+
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Recommendation: %{fullData.name}<br>"
+                "Within this theme: %{x:.1f}%<br>"
+                "Reviews: %{customdata[0]:,}<br>"
+                "Share of all specific feedback: "
+                "%{customdata[1]:.1f}%"
+                "<extra></extra>"
+            )
+        )
+
+
+        # ---------------------------------------------------------
+        # LAYOUT
+        # ---------------------------------------------------------
+
+        fig_theme.update_layout(
+
+            height=560,
+
+            barmode="stack",
+
+            xaxis=dict(
+                range=[0, 100],
+                tickmode="linear",
+                dtick=10,
+                ticksuffix="%"
+            ),
+
+            xaxis_title=(
+                "Positive vs Negative Share Within Theme"
+            ),
+
+            yaxis_title=(
+                "Feedback Theme (% of Specific Feedback)"
+            ),
+
+            legend_title_text=(
+                "Recommendation"
+            ),
+
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+
+            uniformtext_minsize=10,
+            uniformtext_mode="show"
+        )
+
+
+        st.plotly_chart(
+            fig_theme,
+            width="stretch"
+        )
+
+
+    else:
+
+        st.warning(
+            "No reviews were found for the selected modelling genres."
+        )
+
+
+else:
+
+    st.warning(
+        "One or more required columns are missing: "
+        "primary_genre, game_type, main_theme, "
+        "or recommendation_polarity."
     )
-)
 
 
-# ---------------------------------------------------------
-# SORT THEMES
-# Most commonly discussed theme at the top
-# ---------------------------------------------------------
-
-theme_order = (
-    theme_summary
-    .sort_values(
-        "theme_total",
-        ascending=True
-    )["theme_label"]
-    .tolist()
-)
-
-
-# ---------------------------------------------------------
-# CAPTION
-# ---------------------------------------------------------
-
-st.caption(
-    f"Based on {specific_feedback_total:,} reviews containing "
-    f"a specific feedback theme for Indie {selected_genre} games. "
-    f"Each bar adds up to 100% and shows the positive vs negative "
-    f"split within that feedback theme."
-)
-
-
-# ---------------------------------------------------------
-# 100% STACKED BAR CHART
-# ---------------------------------------------------------
-
-fig_theme = px.bar(
-    theme_sentiment_counts,
-
-    # Positive + Negative = 100% for each theme
-    x="percentage",
-
-    y="theme_label",
-
-    color="recommendation_polarity",
-
-    orientation="h",
-
-    barmode="stack",
-
-    # Percentage shown inside each section
-    text="percentage",
-
-    category_orders={
-        "theme_label": theme_order,
-
-        "recommendation_polarity": [
-            "Positive",
-            "Negative"
-        ]
-    },
-
-    color_discrete_map={
-        "Positive": "#2ECC71",
-        "Negative": "#E74C3C"
-    },
-
-    title=(
-        f"Positive vs Negative Feedback by Theme "
-        f"for Indie {selected_genre} Games"
-    ),
-
-    labels={
-        "percentage":
-            "% Within Theme",
-
-        "theme_label":
-            "Feedback Theme",
-
-        "recommendation_polarity":
-            "Recommendation"
-    },
-
-    custom_data=[
-        "review_count",
-        "theme_share"
-    ]
-)
-
-
-# ---------------------------------------------------------
-# CENTRE THE PERCENTAGES INSIDE EACH COLOURED SECTION
-# ---------------------------------------------------------
-
-fig_theme.update_traces(
-
-    texttemplate="%{text:.1f}%",
-
-    textposition="inside",
-
-    # Centre percentage in green/red segment
-    insidetextanchor="middle",
-
-    textfont=dict(
-        color="white",
-        size=13
-    ),
-
-    hovertemplate=(
-        "<b>%{y}</b><br>"
-        "Recommendation: %{fullData.name}<br>"
-        "Within this theme: %{x:.1f}%<br>"
-        "Reviews: %{customdata[0]:,}<br>"
-        "Theme share of all specific feedback: "
-        "%{customdata[1]:.1f}%"
-        "<extra></extra>"
-    )
-)
-
-
-# ---------------------------------------------------------
-# LAYOUT
-# ---------------------------------------------------------
-
-fig_theme.update_layout(
-
-    height=550,
-
-    barmode="stack",
-
-    # Every bar is exactly 100%
-    xaxis=dict(
-        range=[0, 100],
-        tickmode="linear",
-        dtick=10,
-        ticksuffix="%"
-    ),
-
-    xaxis_title=(
-        "Positive vs Negative Share Within Theme"
-    ),
-
-    yaxis_title=(
-        "Feedback Theme (% of All Specific Feedback)"
-    ),
-
-    legend_title_text=(
-        "Recommendation"
-    ),
-
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    ),
-
-    # Keep labels visible where possible
-    uniformtext_minsize=10,
-    uniformtext_mode="show"
-)
-
-
-st.plotly_chart(
-    fig_theme,
-    width="stretch"
-)
+st.divider()
