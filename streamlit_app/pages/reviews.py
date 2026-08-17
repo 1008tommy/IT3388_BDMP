@@ -385,6 +385,9 @@ st.write(
     most commonly discussed by players. General positive and negative
     feedback are excluded so that the chart focuses on more actionable
     areas such as gameplay, technical issues, content, story and pricing.
+
+    The percentages are recalculated after removing general feedback,
+    so the remaining specific feedback themes add up to 100%.
     """
 )
 
@@ -479,14 +482,31 @@ if (
     )
 
 
-    # Percentage among SPECIFIC themes only
-    theme_counts["percentage"] = (
-        theme_counts["review_count"]
-        / theme_counts["review_count"].sum()
-        * 100
+    # ---------------------------------------------------------
+    # RECALCULATE PERCENTAGES
+    # GENERAL FEEDBACK HAS ALREADY BEEN REMOVED,
+    # SO THESE THEMES ADD UP TO 100%
+    # ---------------------------------------------------------
+
+    specific_feedback_total = (
+        theme_counts["review_count"].sum()
     )
 
 
+    if specific_feedback_total > 0:
+
+        theme_counts["percentage"] = (
+            theme_counts["review_count"]
+            / specific_feedback_total
+            * 100
+        )
+
+    else:
+
+        theme_counts["percentage"] = 0
+
+
+    # Sort so largest bar appears at top
     theme_counts = (
         theme_counts
         .sort_values(
@@ -497,14 +517,28 @@ if (
 
 
     # ---------------------------------------------------------
+    # SHOW NUMBER OF SPECIFIC REVIEWS USED
+    # ---------------------------------------------------------
+
+    st.caption(
+        f"Based on {specific_feedback_total:,} reviews containing "
+        f"a specific feedback theme for Indie {selected_genre} games. "
+        f"General positive and negative feedback are excluded."
+    )
+
+
+    # ---------------------------------------------------------
     # CHART
     # ---------------------------------------------------------
 
     fig_theme = px.bar(
         theme_counts,
+
         x="percentage",
         y="main_theme",
+
         orientation="h",
+
         text="percentage",
 
         title=(
@@ -541,6 +575,13 @@ if (
 
         yaxis_title=(
             "Feedback Theme"
+        ),
+
+        xaxis=dict(
+            range=[0, max(
+                theme_counts["percentage"].max() * 1.15,
+                10
+            )]
         )
     )
 
@@ -591,6 +632,7 @@ if (
                 .iloc[1]["percentage"]
             )
 
+
             st.info(
                 f"""
                 **Developer Insight:** Among specific feedback for
@@ -600,7 +642,11 @@ if (
                 **{second_theme}**
                 (**{second_percentage:.1f}%**).
 
-                Developers creating an Indie {selected_genre} game
+                Since general praise and complaints are excluded,
+                the percentages shown represent the distribution of
+                actionable feedback themes and add up to **100%**.
+
+                Indie developers creating a {selected_genre} game
                 may want to pay particular attention to these areas
                 when studying similar games and planning improvements.
                 """
