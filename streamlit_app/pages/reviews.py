@@ -343,10 +343,13 @@ col4.metric(
 st.divider()
 
 
+# =========================================================
 # CHART 1
 # KEY FEEDBACK THEMES BY INDIE PRIMARY GENRE
+# POSITIVE VS NEGATIVE STACKED BAR
+# =========================================================
 
-st.header("1. What Feedback Themes Should Indie Developers Look Out For?")
+st.header("What Feedback Themes Should Indie Developers Look Out For?")
 
 st.write(
     """
@@ -355,13 +358,16 @@ st.write(
     feedback are excluded so that the chart focuses on more actionable
     areas such as gameplay, technical issues, content, story and pricing.
 
-    The percentages are recalculated after removing general feedback,
-    so the remaining specific feedback themes add up to 100%.
+    Each feedback theme is split into positive and negative reviews,
+    allowing developers to see whether players are mainly praising or
+    criticising that aspect of similar games.
     """
 )
 
 
+# ---------------------------------------------------------
 # GENRES USED IN THE MODELLING / SAMPLING PLAN
+# ---------------------------------------------------------
 
 MODEL_GENRES = [
     "Action",
@@ -373,21 +379,29 @@ MODEL_GENRES = [
 ]
 
 
+# ---------------------------------------------------------
 # PREPARE INDIE REVIEW DATA
+# ---------------------------------------------------------
 
 if (
     "primary_genre" in df.columns
     and "game_type" in df.columns
+    and "recommendation_polarity" in df.columns
 ):
 
     indie_genre_df = df[
         (df["game_type"] == "Indie")
         & (df["primary_genre"].isin(MODEL_GENRES))
         & (df["main_theme"].notna())
+        & (df["recommendation_polarity"].isin(
+            ["Positive", "Negative"]
+        ))
     ].copy()
 
 
+    # ---------------------------------------------------------
     # REMOVE GENERAL FEEDBACK
+    # ---------------------------------------------------------
 
     general_themes = [
         "General positive feedback",
@@ -402,7 +416,9 @@ if (
     ]
 
 
+    # ---------------------------------------------------------
     # GENRE SELECTOR
+    # ---------------------------------------------------------
 
     available_genres = [
         genre
@@ -419,7 +435,9 @@ if (
     )
 
 
+    # ---------------------------------------------------------
     # FILTER TO SELECTED PRIMARY GENRE
+    # ---------------------------------------------------------
 
     selected_genre_df = indie_genre_df[
         indie_genre_df["primary_genre"]
@@ -427,11 +445,18 @@ if (
     ].copy()
 
 
-    # COUNT SPECIFIC FEEDBACK THEMES
+    # ---------------------------------------------------------
+    # COUNT THEME + POSITIVE / NEGATIVE
+    # ---------------------------------------------------------
 
-    theme_counts = (
+    theme_sentiment_counts = (
         selected_genre_df
-        .groupby("main_theme")
+        .groupby(
+            [
+                "main_theme",
+                "recommendation_polarity"
+            ]
+        )
         .size()
         .reset_index(
             name="review_count"
@@ -439,58 +464,136 @@ if (
     )
 
 
-    # RECALCULATE PERCENTAGES
-    # GENERAL FEEDBACK HAS ALREADY BEEN REMOVED,
-    # SO THESE THEMES ADD UP TO 100%
+    # ---------------------------------------------------------
+    # TOTAL SPECIFIC FEEDBACK
+    # ---------------------------------------------------------
 
     specific_feedback_total = (
-        theme_counts["review_count"].sum()
+        theme_sentiment_counts[
+            "review_count"
+        ].sum()
     )
 
 
+    # ---------------------------------------------------------
+    # PERCENTAGE OF ALL SPECIFIC FEEDBACK
+    #
+    # Positive + Negative segments across ALL themes
+    # therefore add up to 100%
+    # ---------------------------------------------------------
+
     if specific_feedback_total > 0:
 
-        theme_counts["percentage"] = (
-            theme_counts["review_count"]
+        theme_sentiment_counts[
+            "percentage"
+        ] = (
+            theme_sentiment_counts[
+                "review_count"
+            ]
             / specific_feedback_total
             * 100
         )
 
     else:
 
-        theme_counts["percentage"] = 0
+        theme_sentiment_counts[
+            "percentage"
+        ] = 0
 
 
-    # Sort so largest bar appears at top
-    theme_counts = (
-        theme_counts
+    # ---------------------------------------------------------
+    # CALCULATE SENTIMENT SHARE WITHIN EACH THEME
+    # Used for hover information
+    # ---------------------------------------------------------
+
+    theme_sentiment_counts[
+        "theme_total"
+    ] = (
+        theme_sentiment_counts
+        .groupby("main_theme")[
+            "review_count"
+        ]
+        .transform("sum")
+    )
+
+
+    theme_sentiment_counts[
+        "within_theme_percentage"
+    ] = (
+        theme_sentiment_counts[
+            "review_count"
+        ]
+        / theme_sentiment_counts[
+            "theme_total"
+        ]
+        * 100
+    )
+
+
+    # ---------------------------------------------------------
+    # FIND TOTAL SHARE OF EACH THEME
+    # Used to sort bars
+    # ---------------------------------------------------------
+
+    theme_totals = (
+        theme_sentiment_counts
+        .groupby("main_theme")[
+            "percentage"
+        ]
+        .sum()
         .sort_values(
-            "percentage",
             ascending=True
         )
     )
 
 
-    # SHOW NUMBER OF SPECIFIC REVIEWS USED
+    theme_order = (
+        theme_totals.index.tolist()
+    )
+
+
+    # ---------------------------------------------------------
+    # CAPTION
+    # ---------------------------------------------------------
 
     st.caption(
         f"Based on {specific_feedback_total:,} reviews containing "
         f"a specific feedback theme for Indie {selected_genre} games. "
-        f"General positive and negative feedback are excluded."
+        f"General positive and negative feedback are excluded. "
+        f"All displayed segments together add up to 100%."
     )
 
 
-    # CHART
+    # ---------------------------------------------------------
+    # STACKED BAR CHART
+    # ---------------------------------------------------------
 
     fig_theme = px.bar(
-        theme_counts,
+        theme_sentiment_counts,
 
         x="percentage",
         y="main_theme",
 
+        color="recommendation_polarity",
+
         orientation="h",
 
+        barmode="stack",
+
         text="percentage",
+
+        category_orders={
+            "main_theme": theme_order,
+            "recommendation_polarity": [
+                "Positive",
+                "Negative"
+            ]
+        },
+
+        color_discrete_map={
+            "Positive": "#2ECC71",
+            "Negative": "#E74C3C"
+        },
 
         title=(
             f"Key Feedback Themes for "
@@ -500,25 +603,53 @@ if (
         labels={
             "percentage":
                 "% of Specific Feedback",
+
             "main_theme":
-                "Feedback Theme"
-        }
+                "Feedback Theme",
+
+            "recommendation_polarity":
+                "Recommendation"
+        },
+
+        custom_data=[
+            "review_count",
+            "within_theme_percentage"
+        ]
     )
 
+
+    # ---------------------------------------------------------
+    # BAR LABELS + HOVER
+    # ---------------------------------------------------------
 
     fig_theme.update_traces(
+
         texttemplate="%{text:.1f}%",
-        textposition="outside"
+
+        textposition="inside",
+
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Recommendation: %{fullData.name}<br>"
+            "Share of all specific feedback: "
+            "%{x:.1f}%<br>"
+            "Reviews: %{customdata[0]:,}<br>"
+            "Within this theme: "
+            "%{customdata[1]:.1f}%"
+            "<extra></extra>"
+        )
     )
 
 
-    fig_theme.update_layout(
-        height=500,
+    # ---------------------------------------------------------
+    # LAYOUT
+    # ---------------------------------------------------------
 
-        yaxis={
-            "categoryorder":
-                "total ascending"
-        },
+    fig_theme.update_layout(
+
+        height=520,
+
+        barmode="stack",
 
         xaxis_title=(
             "% of Specific Feedback"
@@ -528,11 +659,26 @@ if (
             "Feedback Theme"
         ),
 
+        legend_title_text=(
+            "Recommendation"
+        ),
+
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+
         xaxis=dict(
-            range=[0, max(
-                theme_counts["percentage"].max() * 1.15,
-                10
-            )]
+            range=[
+                0,
+                max(
+                    theme_totals.max() * 1.15,
+                    10
+                )
+            ]
         )
     )
 
@@ -545,8 +691,8 @@ if (
 else:
 
     st.warning(
-        "The primary_genre or game_type column "
-        "is not available."
+        "The primary_genre, game_type or "
+        "recommendation_polarity column is not available."
     )
 
 
