@@ -95,26 +95,44 @@ AUDIO_LANGUAGES = ['Afrikaans', 'Albanian', 'Amharic', 'Arabic', 'Armenian', 'As
     'Ukrainian', 'Urdu', 'Uyghur', 'Uzbek', 'Valencian', 'Vietnamese', 'Welsh', 'Wolof', 'Xhosa',
     'Yoruba', 'Zulu']
 
+# You need to define all possible tags that the model expects
+# This should be loaded from your training data or model metadata
+# For now, adding some common tags as example
+TAGS = ['1980s', '1990s', '2.5D', '2D', '2D_Fighter', '3D', '3D_Platformer', '4X', 'Action',
+        'Action_Adventure', 'Action_RPG', 'Adventure', 'Anime', 'Arcade', 'Atmospheric',
+        'Base_Building', 'Battle_Royale', 'Beautiful', 'Building', 'Card_Game', 'Casual',
+        'Character_Customization', 'Classic', 'Co_op', 'Colorful', 'Comedy', 'Competitive',
+        'Cooperative', 'Crafting', 'Dark', 'Dark_Fantasy', 'Difficult', 'Dungeon_Crawler',
+        'Exploration', 'FPS', 'Fantasy', 'Fast_Paced', 'Fighting', 'First_Person', 'Funny',
+        'Gore', 'Great_Soundtrack', 'Hack_and_Slash', 'Horror', 'Indie', 'JRPG', 'Loot',
+        'Mature', 'Medieval', 'Memes', 'Metroidvania', 'MOBA', 'Multiplayer', 'Mystery',
+        'Naval', 'Ninja', 'Open_World', 'Party_Based', 'Pixel_Graphics', 'Platformer',
+        'Point_and_Click', 'Psychological_Horror', 'Puzzle', 'Racing', 'Retro', 'Rogue_like',
+        'Rogue_lite', 'RPG', 'Sandbox', 'Sci_fi', 'Shooter', 'Simulation', 'Singleplayer',
+        'Souls_like', 'Space', 'Sports', 'Strategy', 'Survival', 'Tactical', 'Third_Person',
+        'Thriller', 'Tower_Defense', 'Turn_Based', 'Turn_Based_Strategy', 'Twin_Stick_Shooter',
+        'Visual_Novel', 'VR', 'Walking_Simulator', 'War', 'Zombies']
+
 # =========================================================
 # UI
 # =========================================================
 
-st.title("🎮 Steam Game Performance Predictor")
+st.title("Steam Game Performance Predictor")
 
 if model_ccu and model_playtime:
-    st.success("✅ Models loaded!")
+    st.success("Models loaded successfully!")
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Peak CCU Model", "Random Forest", f"R² = {ccu_r2:.4f}")
+        st.metric("Peak CCU Model", "Random Forest", f"R2 = {ccu_r2:.4f}")
     with col2:
-        st.metric("Playtime Model", "XGBoost", f"R² = {playtime_r2:.4f}")
+        st.metric("Playtime Model", "XGBoost", f"R2 = {playtime_r2:.4f}")
     
     st.divider()
     
     # =========================================================
     # BASIC FEATURES
     # =========================================================
-    st.subheader("📊 Basic Features")
+    st.subheader("Basic Features")
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -124,7 +142,7 @@ if model_ccu and model_playtime:
         achievements = st.number_input("Achievements", 0, 1000, 50)
         release_date = st.date_input("Release Date", date.today())
     with col3:
-        st.write("**Platforms**")
+        st.write("Platforms")
         windows = st.checkbox("Windows", True)
         mac = st.checkbox("Mac", False)
         linux = st.checkbox("Linux", False)
@@ -134,13 +152,12 @@ if model_ccu and model_playtime:
     # =========================================================
     # CATEGORIES (MULTISELECT)
     # =========================================================
-    st.subheader("🎯 Categories")
+    st.subheader("Categories")
     selected_categories = st.multiselect(
         "Select categories:",
         options=[c.replace('_', ' ') for c in CATEGORIES],
         default=['Single player', 'Steam Achievements']
     )
-    # Convert back to underscore format
     selected_categories = [c.replace(' ', '_') for c in selected_categories]
     
     st.divider()
@@ -148,13 +165,12 @@ if model_ccu and model_playtime:
     # =========================================================
     # GENRES (MULTISELECT)
     # =========================================================
-    st.subheader("🎨 Genres")
+    st.subheader("Genres")
     selected_genres = st.multiselect(
         "Select genres:",
         options=[g.replace('_', ' ') for g in GENRES],
         default=['Action', 'Indie']
     )
-    # Convert back to underscore format
     selected_genres = [g.replace(' ', '_') for g in selected_genres]
     
     st.divider()
@@ -162,11 +178,11 @@ if model_ccu and model_playtime:
     # =========================================================
     # LANGUAGES (MULTISELECT)
     # =========================================================
-    st.subheader("🌍 Languages")
+    st.subheader("Languages")
     col1, col2 = st.columns(2)
     
     with col1:
-        st.write("**Supported Languages (Subtitles)**")
+        st.write("Supported Languages (Subtitles)")
         selected_supported_langs = st.multiselect(
             "Select supported languages:",
             options=[l.replace('_', ' ') for l in SUPPORTED_LANGUAGES],
@@ -177,7 +193,7 @@ if model_ccu and model_playtime:
         st.info(f"Count: {len(selected_supported_langs)}")
     
     with col2:
-        st.write("**Full Audio Languages**")
+        st.write("Full Audio Languages")
         selected_audio_langs = st.multiselect(
             "Select audio languages:",
             options=[l.replace('_', ' ') for l in AUDIO_LANGUAGES],
@@ -192,10 +208,9 @@ if model_ccu and model_playtime:
     # =========================================================
     # TAGS (DYNAMIC INPUT)
     # =========================================================
-    st.subheader("🏷️ Tags")
+    st.subheader("Tags")
     st.write("Add tags and their vote counts:")
     
-    # Initialize session state for tags
     if 'tags' not in st.session_state:
         st.session_state.tags = {}
     
@@ -207,13 +222,12 @@ if model_ccu and model_playtime:
     with col3:
         st.write("")
         st.write("")
-        if st.button("➕ Add Tag"):
+        if st.button("Add Tag"):
             if tag_name:
                 st.session_state.tags[tag_name] = tag_votes
     
-    # Display current tags
     if st.session_state.tags:
-        st.write("**Current Tags:**")
+        st.write("Current Tags:")
         for tag, votes in st.session_state.tags.items():
             col1, col2, col3 = st.columns([3, 2, 1])
             with col1:
@@ -221,14 +235,13 @@ if model_ccu and model_playtime:
             with col2:
                 st.write(f"{votes:,} votes")
             with col3:
-                if st.button("🗑️", key=f"remove_{tag}"):
+                if st.button("Remove", key=f"remove_{tag}"):
                     del st.session_state.tags[tag]
                     st.rerun()
         
-        # Auto-calculated metrics
         tag_count = len(st.session_state.tags)
         total_tag_votes = sum(st.session_state.tags.values())
-        st.info(f"**Tag Count:** {tag_count} | **Total Votes:** {total_tag_votes:,}")
+        st.info(f"Tag Count: {tag_count} | Total Votes: {total_tag_votes:,}")
     else:
         tag_count = 0
         total_tag_votes = 0
@@ -239,16 +252,14 @@ if model_ccu and model_playtime:
     # =========================================================
     # PREDICT BUTTON
     # =========================================================
-    if st.button("🔮 Predict Performance", type="primary"):
+    if st.button("Predict Performance", type="primary"):
         try:
-            # Calculate engineered features
             platform_count = int(windows) + int(mac) + int(linux)
             category_count = len(selected_categories)
             genre_count = len(selected_genres)
             supported_languages_count = len(selected_supported_langs)
             audio_languages_count = len(selected_audio_langs)
             
-            # Date features
             days_since_release = (date.today() - release_date).days
             release_year = release_date.year
             release_month = release_date.month
@@ -258,7 +269,6 @@ if model_ccu and model_playtime:
             year_bucket_2010s = int(2010 <= release_year < 2020)
             year_bucket_2020s = int(release_year >= 2020)
             
-            # Build complete feature set
             input_data = {
                 'price': price,
                 'dlc_count': dlc_count,
@@ -300,16 +310,34 @@ if model_ccu and model_playtime:
             for lang in AUDIO_LANGUAGES:
                 input_data[f'full_audio_languages_{lang}'] = 1 if lang in selected_audio_langs else 0
             
+            # IMPORTANT: Add all tag features with 0 default
+            for tag in TAGS:
+                tag_key = f'tags_{tag}'
+                # If the tag is in session state, use its vote count, else 0
+                input_data[tag_key] = st.session_state.tags.get(tag, 0)
+            
             input_df = pd.DataFrame([input_data])
             
-            # Predict
+            # Get the expected feature names from the model
+            # This ensures we only pass features the model expects
+            expected_features = model_ccu.feature_names_in_
+            
+            # Filter input data to only include features the model expects
+            # For any missing expected features, add them with 0
+            for feature in expected_features:
+                if feature not in input_data:
+                    input_data[feature] = 0
+            
+            # Recreate DataFrame with correct order
+            input_df = pd.DataFrame([input_data])[expected_features]
+            
             pred_ccu_log = model_ccu.predict(input_df)[0]
             pred_playtime_log = model_playtime.predict(input_df)[0]
             
             pred_ccu = np.expm1(pred_ccu_log)
             pred_playtime = np.expm1(pred_playtime_log)
             
-            st.success("✅ Prediction Complete!")
+            st.success("Prediction Complete!")
             
             col1, col2 = st.columns(2)
             with col1:
@@ -317,21 +345,20 @@ if model_ccu and model_playtime:
             with col2:
                 st.metric("Predicted Avg Playtime", f"{int(pred_playtime):,} mins", help="Average minutes played per user")
             
-            # Summary
-            with st.expander("📋 Input Summary"):
-                st.write(f"**Basic:** ${price} | {dlc_count} DLCs | {achievements} achievements")
-                st.write(f"**Platforms:** {platform_count} ({', '.join([p for p, v in [('Windows', windows), ('Mac', mac), ('Linux', linux)] if v])})")
-                st.write(f"**Categories ({category_count}):** {', '.join([c.replace('_', ' ') for c in selected_categories])}")
-                st.write(f"**Genres ({genre_count}):** {', '.join([g.replace('_', ' ') for g in selected_genres])}")
-                st.write(f"**Languages:** {supported_languages_count} supported, {audio_languages_count} audio")
-                st.write(f"**Tags:** {tag_count} tags, {total_tag_votes:,} total votes")
-                st.write(f"**Release:** {release_date} ({days_since_release} days ago)")
+            with st.expander("Input Summary"):
+                st.write(f"Basic: ${price} | {dlc_count} DLCs | {achievements} achievements")
+                st.write(f"Platforms: {platform_count} ({', '.join([p for p, v in [('Windows', windows), ('Mac', mac), ('Linux', linux)] if v])})")
+                st.write(f"Categories ({category_count}): {', '.join([c.replace('_', ' ') for c in selected_categories])}")
+                st.write(f"Genres ({genre_count}): {', '.join([g.replace('_', ' ') for g in selected_genres])}")
+                st.write(f"Languages: {supported_languages_count} supported, {audio_languages_count} audio")
+                st.write(f"Tags: {tag_count} tags, {total_tag_votes:,} total votes")
+                st.write(f"Release: {release_date} ({days_since_release} days ago)")
                 
         except Exception as e:
-            st.error(f"❌ Prediction failed: {str(e)}")
+            st.error(f"Prediction failed: {str(e)}")
             st.exception(e)
 else:
-    st.error("❌ Failed to load models")
+    st.error("Failed to load models")
 
 st.divider()
 st.caption("Models trained on Steam game metadata | Random Forest (CCU) + XGBoost (Playtime)")
