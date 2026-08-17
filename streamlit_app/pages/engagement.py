@@ -2,7 +2,7 @@ import streamlit as st
 import mlflow
 import pandas as pd
 import numpy as np
-import os
+from datetime import date, datetime
 
 # =========================================================
 # CONFIGURATION
@@ -13,49 +13,37 @@ MLFLOW_EXPERIMENT = "/Users/242475r@mymail.nyp.edu.sg/IT3388_BDMP/game_performan
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
 # =========================================================
-# LOAD BEST MODELS
+# LOAD MODELS
 # =========================================================
 
 @st.cache_resource
-def load_best_models():
-    """Load the best performing models for Peak CCU and Average Playtime"""
-    
+def load_models():
     experiment = mlflow.get_experiment_by_name(MLFLOW_EXPERIMENT)
     
-    # Load best Peak CCU model
     runs_ccu = mlflow.search_runs(
         experiment_ids=[experiment.experiment_id],
-        filter_string="tags.mlflow.runName LIKE '% - Peak CCU'",
-        order_by=["metrics.test_r2 DESC"],
+        filter_string="tags.mlflow.runName LIKE 'Random Forest - Peak CCU%'",
         max_results=1
     )
     
-    # Load best Average Playtime model
     runs_playtime = mlflow.search_runs(
         experiment_ids=[experiment.experiment_id],
-        filter_string="tags.mlflow.runName LIKE '% - Average Playtime'",
-        order_by=["metrics.test_r2 DESC"],
+        filter_string="tags.mlflow.runName LIKE 'XGBoost - Average Playtime%'",
         max_results=1
     )
     
     if len(runs_ccu) > 0 and len(runs_playtime) > 0:
         model_ccu = mlflow.sklearn.load_model(f"runs:/{runs_ccu.iloc[0]['run_id']}/model")
         model_playtime = mlflow.sklearn.load_model(f"runs:/{runs_playtime.iloc[0]['run_id']}/model")
-        
-        ccu_name = runs_ccu.iloc[0]['tags.mlflow.runName']
-        playtime_name = runs_playtime.iloc[0]['tags.mlflow.runName']
         ccu_r2 = runs_ccu.iloc[0]['metrics.test_r2']
         playtime_r2 = runs_playtime.iloc[0]['metrics.test_r2']
-        
-        return model_ccu, model_playtime, ccu_name, playtime_name, ccu_r2, playtime_r2
-    
-    return None, None, None, None, None, None
+        return model_ccu, model_playtime, ccu_r2, playtime_r2
+    return None, None, None, None
 
-# Load models
-model_ccu, model_playtime, ccu_name, playtime_name, ccu_r2, playtime_r2 = load_best_models()
+model_ccu, model_playtime, ccu_r2, playtime_r2 = load_models()
 
 # =========================================================
-# DEFINE ALL CATEGORIES AND GENRES
+# CATEGORIES AND GENRES
 # =========================================================
 
 CATEGORIES = [
@@ -90,143 +78,155 @@ GENRES = [
 ]
 
 # =========================================================
-# STREAMLIT APP UI
+# UI
 # =========================================================
 
 st.title("🎮 Steam Game Performance Predictor")
-st.write("Predict Peak CCU and Average Playtime based on game features")
 
 if model_ccu and model_playtime:
-    st.success(f"✅ Models loaded successfully!")
-    
+    st.success("✅ Models loaded!")
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Peak CCU Model", ccu_name.split(' - ')[0], f"R² = {ccu_r2:.4f}")
+        st.metric("Peak CCU Model", "Random Forest", f"R² = {ccu_r2:.4f}")
     with col2:
-        st.metric("Playtime Model", playtime_name.split(' - ')[0], f"R² = {playtime_r2:.4f}")
+        st.metric("Playtime Model", "XGBoost", f"R² = {playtime_r2:.4f}")
     
     st.divider()
     
-    # =========================================================
-    # INPUT FEATURES
-    # =========================================================
-    
-    st.subheader("📊 Game Features")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        price = st.number_input("Price ($)", min_value=0.0, max_value=500.0, value=19.99, step=0.99)
-        dlc_count = st.number_input("DLC Count", min_value=0, max_value=100, value=0, step=1)
-        achievements = st.number_input("Achievements", min_value=0, max_value=1000, value=50, step=1)
-    
-    with col2:
-        st.write("**Platform Support**")
-        windows = st.checkbox("Windows", value=True)
-        mac = st.checkbox("Mac", value=False)
-        linux = st.checkbox("Linux", value=False)
-    
-    st.divider()
-    
-    # Categories Selection
-    st.subheader("🎯 Categories")
-    st.write("Select applicable categories:")
-    
-    # Popular categories displayed as checkboxes
-    selected_categories = []
-    
+    # Basic Features
+    st.subheader("📊 Basic Features")
     col1, col2, col3 = st.columns(3)
-    for i, category in enumerate(sorted(CATEGORIES)):
-        col = [col1, col2, col3][i % 3]
-        with col:
-            if st.checkbox(category.replace('_', ' '), key=f"cat_{category}"):
-                selected_categories.append(category)
+    
+    with col1:
+        price = st.number_input("Price ($)", 0.0, 500.0, 19.99, 0.99)
+        dlc_count = st.number_input("DLC Count", 0, 100, 0)
+    with col2:
+        achievements = st.number_input("Achievements", 0, 1000, 50)
+        release_date = st.date_input("Release Date", date.today())
+    with col3:
+        st.write("**Platforms**")
+        windows = st.checkbox("Windows", True)
+        mac = st.checkbox("Mac", False)
+        linux = st.checkbox("Linux", False)
     
     st.divider()
     
-    # Genres Selection
+    # Categories
+    st.subheader("🎯 Categories")
+    selected_categories = []
+    col1, col2, col3 = st.columns(3)
+    for i, cat in enumerate(sorted(CATEGORIES)):
+        with [col1, col2, col3][i % 3]:
+            if st.checkbox(cat.replace('_', ' '), key=f"cat_{cat}"):
+                selected_categories.append(cat)
+    
+    st.divider()
+    
+    # Genres
     st.subheader("🎨 Genres")
-    st.write("Select applicable genres:")
-    
     selected_genres = []
-    
     col1, col2, col3 = st.columns(3)
     for i, genre in enumerate(sorted(GENRES)):
-        col = [col1, col2, col3][i % 3]
-        with col:
+        with [col1, col2, col3][i % 3]:
             if st.checkbox(genre.replace('_', ' '), key=f"gen_{genre}"):
                 selected_genres.append(genre)
     
     st.divider()
     
-    # =========================================================
-    # MAKE PREDICTIONS
-    # =========================================================
+    # Advanced Features
+    with st.expander("🔧 Advanced Features (Optional)"):
+        col1, col2 = st.columns(2)
+        with col1:
+            supported_languages_count = st.number_input("Supported Languages Count", 0, 120, 10)
+            audio_languages_count = st.number_input("Full Audio Languages Count", 0, 120, 5)
+        with col2:
+            tag_count = st.number_input("Tag Count", 0, 100, 10)
+            total_tag_votes = st.number_input("Total Tag Votes", 0, 100000, 1000)
     
+    st.divider()
+    
+    # PREDICT
     if st.button("🔮 Predict Performance", type="primary"):
         try:
-            # Build feature dataframe with ALL features from silver table
-            # Start with basic features
+            # Calculate engineered features
+            platform_count = int(windows) + int(mac) + int(linux)
+            category_count = len(selected_categories)
+            genre_count = len(selected_genres)
+            
+            # Date features
+            days_since_release = (date.today() - release_date).days
+            release_year = release_date.year
+            release_month = release_date.month
+            release_day_of_week = release_date.isoweekday()
+            release_quarter = (release_month - 1) // 3 + 1
+            year_bucket_2000s = int(2000 <= release_year < 2010)
+            year_bucket_2010s = int(2010 <= release_year < 2020)
+            year_bucket_2020s = int(release_year >= 2020)
+            
+            # Build complete feature set
             input_data = {
                 'price': price,
                 'dlc_count': dlc_count,
                 'windows': int(windows),
                 'mac': int(mac),
                 'linux': int(linux),
-                'achievements': achievements
+                'achievements': achievements,
+                'platform_count': platform_count,
+                'supported_languages_count': supported_languages_count,
+                'audio_languages_count': audio_languages_count,
+                'category_count': category_count,
+                'genre_count': genre_count,
+                'tag_count': tag_count,
+                'total_tag_votes': total_tag_votes,
+                'tag_diversity': tag_count,
+                'release_year': release_year,
+                'release_month': release_month,
+                'release_day_of_week': release_day_of_week,
+                'release_quarter': release_quarter,
+                'days_since_release': days_since_release,
+                'year_bucket_2000s': year_bucket_2000s,
+                'year_bucket_2010s': year_bucket_2010s,
+                'year_bucket_2020s': year_bucket_2020s
             }
             
-            # Add all category features (0 by default)
+            # Add category features
             for cat in CATEGORIES:
                 input_data[f'categories_{cat}'] = 1 if cat in selected_categories else 0
             
-            # Add all genre features (0 by default)
+            # Add genre features
             for genre in GENRES:
                 input_data[f'genres_{genre}'] = 1 if genre in selected_genres else 0
             
-            # Convert to DataFrame
+            # Add all language features (set to 0 - we don't have UI for all 120+ languages)
+            # You can expand this if needed
+            for lang_type in ['supported_languages', 'full_audio_languages']:
+                for lang in ['English', 'French', 'German', 'Spanish_Spain', 'Simplified_Chinese', 
+                            'Traditional_Chinese', 'Japanese', 'Korean', 'Russian', 'Portuguese_Brazil']:
+                    input_data[f'{lang_type}_{lang}'] = 0
+            
             input_df = pd.DataFrame([input_data])
             
-            # Make predictions (models were trained on log-transformed targets)
+            # Predict
             pred_ccu_log = model_ccu.predict(input_df)[0]
             pred_playtime_log = model_playtime.predict(input_df)[0]
             
-            # Transform back to original scale
             pred_ccu = np.expm1(pred_ccu_log)
             pred_playtime = np.expm1(pred_playtime_log)
             
             st.success("✅ Prediction Complete!")
             
             col1, col2 = st.columns(2)
-            
             with col1:
-                st.metric(
-                    "Predicted Peak CCU",
-                    f"{int(pred_ccu):,}",
-                    help="Maximum concurrent users at peak"
-                )
-            
+                st.metric("Predicted Peak CCU", f"{int(pred_ccu):,}")
             with col2:
-                st.metric(
-                    "Predicted Avg Playtime",
-                    f"{int(pred_playtime):,} mins",
-                    help="Average playtime per player"
-                )
+                st.metric("Predicted Avg Playtime", f"{int(pred_playtime):,} mins")
             
-            # Show selection summary
-            with st.expander("📋 Selection Summary"):
-                st.write(f"**Price:** ${price}")
-                st.write(f"**DLC Count:** {dlc_count}")
-                st.write(f"**Achievements:** {achievements}")
-                st.write(f"**Platforms:** {', '.join([p for p, v in [('Windows', windows), ('Mac', mac), ('Linux', linux)] if v])}")
-                st.write(f"**Selected Categories ({len(selected_categories)}):** {', '.join([c.replace('_', ' ') for c in selected_categories]) if selected_categories else 'None'}")
-                st.write(f"**Selected Genres ({len(selected_genres)}):** {', '.join([g.replace('_', ' ') for g in selected_genres]) if selected_genres else 'None'}")
+            with st.expander("📋 Summary"):
+                st.write(f"**Categories:** {', '.join([c.replace('_', ' ') for c in selected_categories]) if selected_categories else 'None'}")
+                st.write(f"**Genres:** {', '.join([g.replace('_', ' ') for g in selected_genres]) if selected_genres else 'None'}")
                 
         except Exception as e:
-            st.error(f"❌ Prediction failed: {str(e)}")
-            st.exception(e)
+            st.error(f"❌ Error: {str(e)}")
+            st.write("Missing features:", [f for f in model_ccu.feature_names_in_ if f not in input_df.columns])
 else:
-    st.error("❌ Failed to load models. Please check MLflow configuration.")
-
-st.divider()
-st.caption("Models trained on Steam game metadata dataset")
+    st.error("❌ Failed to load models")
