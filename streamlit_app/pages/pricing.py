@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 import shap
 from sklearn.metrics import r2_score, root_mean_squared_error, mean_absolute_error
 from sklearn.model_selection import train_test_split
+import os
+from databricks import sql
+from databricks.sdk.core import Config
 
 # -- Config --------------------------------------------------------------------
 PYCARET_RUN_URI = "runs:/3e9c0f4b46e846faba9cacdaaa1aae24/model"
@@ -17,31 +20,77 @@ RAW_LIST_COLS = ["supported_languages", "full_audio_languages", "developers", "p
 
 
 # -- Load Data -----------------------------------------------------------------
-@st.cache_data
-def load_data():
-    gold = (
-        pd.read_csv(GOLD_PATH)
-        .astype(
-            {
-                "steam_id": "int64",
-                "launch_price": "float64",
-                "launched_with_discount": "bool",
-                "min_price": "float64",
-                "max_price": "float64",
-                "min_base_price": "float64",
-                "max_base_price": "float64",
-                "avg_discount_pct": "float64",
-                "pct_time_discounted": "float64",
-                "n_discount_events": "int64",
-                "price_volatility": "int64",
-                "n_price_changes": "int64",
-                "has_price_history": "bool",
-            }
-        )
-        .dropna()
+
+PRICE_TABLE = os.getenv("PRICE_TABLE", "it3388.it3388.gold_price_summary")
+
+METADATA_TABLE = os.getenv("METADATA_TABLE", "it3388.it3388.silver_game_metadata")
+
+WAREHOUSE_ID = os.getenv("DATABRICKS_WAREHOUSE_ID")
+
+cfg = Config()
+
+
+def get_connection():
+
+    if not WAREHOUSE_ID:
+        st.error("SQL Warehouse resource is not configured. Add the SQL Warehouse to the Databricks App.")
+        st.stop()
+
+    server_hostname = cfg.host
+
+    if server_hostname.startswith("https://"):
+        server_hostname = server_hostname.replace("https://", "")
+    elif server_hostname.startswith("http://"):
+        server_hostname = server_hostname.replace("http://", "")
+
+    http_path = f"/sql/1.0/warehouses/{WAREHOUSE_ID}"
+
+    return sql.connect(
+        server_hostname=server_hostname,
+        http_path=http_path,
+        credentials_provider=lambda: cfg.authenticate,
+        use_cloud_fetch=False,
+        _use_arrow_native_complex_types=False,
     )
 
-    meta = pd.read_csv(METADATA_PATH).astype(
+
+@st.cache_data
+def load_data():
+
+    conn = get_connection()
+
+    try:
+        # Load the two Unity Catalog tables
+        gold = pd.read_sql(f"SELECT * FROM {PRICE_TABLE}", conn)
+
+        meta = pd.read_sql(f"SELECT * FROM {METADATA_TABLE}", conn)
+
+    finally:
+        conn.close()
+
+    # -------------------------------------------------------------------------
+    # Same processing as your original code
+    # -------------------------------------------------------------------------
+
+    gold = gold.astype(
+        {
+            "steam_id": "int64",
+            "launch_price": "float64",
+            "launched_with_discount": "bool",
+            "min_price": "float64",
+            "max_price": "float64",
+            "min_base_price": "float64",
+            "max_base_price": "float64",
+            "avg_discount_pct": "float64",
+            "pct_time_discounted": "float64",
+            "n_discount_events": "int64",
+            "price_volatility": "int64",
+            "n_price_changes": "int64",
+            "has_price_history": "bool",
+        }
+    ).dropna()
+
+    meta = meta.astype(
         {
             "app_id": "int64",
             "name": "string",
@@ -50,20 +99,62 @@ def load_data():
         }
     )
 
+    # Merge price + metadata
     price_df = meta.merge(gold, left_on="app_id", right_on="steam_id")
-    price_df = price_df[price_df["launch_price"] != 0].drop(columns=RAW_LIST_COLS, errors="ignore")
 
+    # Remove free games
+    price_df = price_df[price_df["launch_price"] != 0].copy()
+
+    # Remove raw list columns
+    price_df = price_df.drop(columns=RAW_LIST_COLS, errors="ignore")
+
+    # Genre dummy columns
     genre_dummy_cols = [c for c in price_df.columns if c.startswith("genres_")]
+
+    # Review ratio
     price_df["review_ratio"] = price_df["positive"] / (price_df["positive"] + price_df["negative"]).replace(0, np.nan)
 
-    scope = ["platform_count", "supported_languages_count", "audio_languages_count", "category_count", "genre_count", "tag_count", "total_tag_votes", "tag_diversity", "dlc_count", "achievements"]
-    control = ["positive", "negative", "average_playtime_forever", "median_playtime_forever", "peak_ccu", "recommendations", "days_since_release"]
+    # Features
+    scope = [
+        "platform_count",
+        "supported_languages_count",
+        "audio_languages_count",
+        "category_count",
+        "genre_count",
+        "tag_count",
+        "total_tag_votes",
+        "tag_diversity",
+        "dlc_count",
+        "achievements",
+    ]
+
+    control = [
+        "positive",
+        "negative",
+        "average_playtime_forever",
+        "median_playtime_forever",
+        "peak_ccu",
+        "recommendations",
+        "days_since_release",
+    ]
+
     feature_names = scope + control + genre_dummy_cols + ["review_ratio"]
 
-    price_df = price_df.dropna()
-    X, y = price_df[feature_names], price_df["launch_price"]
+    # Remove rows with missing model features
+    price_df = price_df.dropna(subset=feature_names + ["launch_price"])
+
+    X = price_df[feature_names]
+    y = price_df["launch_price"]
+
     _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    return price_df, X_test, y_test, feature_names, genre_dummy_cols
+
+    return (
+        price_df,
+        X_test,
+        y_test,
+        feature_names,
+        genre_dummy_cols,
+    )
 
 
 price_df, X_test, y_test, feature_names, genre_dummy_cols = load_data()
