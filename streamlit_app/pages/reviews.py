@@ -307,40 +307,58 @@ if "game_type" in df.columns:
 st.header("📊 Review Overview")
 
 
-total_reviews = len(scope_df)
+# Total reviews
+total_reviews = len(df)
 
 
-if "app_id" in scope_df.columns:
+# Total games
+if "app_id" in df.columns:
 
     total_games = (
-        scope_df["app_id"]
+        df["app_id"]
         .nunique()
     )
 
 else:
+
     total_games = 0
 
 
+# Positive reviews
+positive_reviews = (
+    df["recommendation_polarity"]
+    == "Positive"
+).sum()
+
+
 positive_percentage = (
-    (
-        scope_df["recommendation_polarity"]
-        == "Positive"
-    )
-    .mean()
+    positive_reviews
+    / total_reviews
     * 100
+    if total_reviews > 0
+    else 0
 )
 
 
-if "review_length_words" in scope_df.columns:
+# Negative reviews
+negative_reviews = (
+    df["recommendation_polarity"]
+    == "Negative"
+).sum()
 
-    average_length = (
-        scope_df["review_length_words"]
-        .mean()
-    )
 
-else:
-    average_length = 0
+negative_percentage = (
+    negative_reviews
+    / total_reviews
+    * 100
+    if total_reviews > 0
+    else 0
+)
 
+
+# =========================================================
+# DISPLAY OVERVIEW CARDS
+# =========================================================
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -364,8 +382,8 @@ col3.metric(
 
 
 col4.metric(
-    "Average Review Length",
-    f"{average_length:.1f} words"
+    "Negative Reviews",
+    f"{negative_percentage:.1f}%"
 )
 
 
