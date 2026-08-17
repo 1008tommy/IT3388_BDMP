@@ -499,30 +499,47 @@ if all(
         # ---------------------------------------------------------
         # POSITIVE / NEGATIVE % WITHIN EACH THEME
         #
-        # EACH BAR = 100%
+        # Used for the text shown INSIDE each bar segment.
+        # Positive + Negative = 100% within each theme.
         # ---------------------------------------------------------
 
         theme_sentiment_counts[
             "within_theme_percentage"
         ] = (
-            theme_sentiment_counts[
-                "review_count"
-            ]
-            / theme_sentiment_counts[
-                "theme_total"
-            ]
+            theme_sentiment_counts["review_count"]
+            / theme_sentiment_counts["theme_total"]
             * 100
         )
 
 
         # ---------------------------------------------------------
-        # CALCULATE HOW COMMON EACH THEME IS OVERALL
+        # TOTAL SPECIFIC FEEDBACK
         # ---------------------------------------------------------
 
         specific_feedback_total = len(
             selected_genre_df
         )
 
+
+        # ---------------------------------------------------------
+        # SHARE OF ALL SPECIFIC FEEDBACK
+        #
+        # This determines the ACTUAL LENGTH of each coloured
+        # segment and therefore the total length of each bar.
+        # ---------------------------------------------------------
+
+        theme_sentiment_counts[
+            "overall_segment_percentage"
+        ] = (
+            theme_sentiment_counts["review_count"]
+            / specific_feedback_total
+            * 100
+        )
+
+
+        # ---------------------------------------------------------
+        # SUMMARY FOR EACH THEME
+        # ---------------------------------------------------------
 
         theme_summary = (
             theme_sentiment_counts
@@ -537,6 +554,7 @@ if all(
         )
 
 
+        # Total length of each bar
         theme_summary["theme_share"] = (
             theme_summary["theme_total"]
             / specific_feedback_total
@@ -554,9 +572,7 @@ if all(
         theme_summary["theme_label"] = (
             theme_summary["main_theme"]
             + " ("
-            + theme_summary[
-                "theme_share"
-            ].map(
+            + theme_summary["theme_share"].map(
                 lambda x: f"{x:.1f}%"
             )
             + ")"
@@ -564,7 +580,7 @@ if all(
 
 
         # ---------------------------------------------------------
-        # ADD THEME SHARE/LABEL BACK TO CHART DATA
+        # MERGE THEME INFORMATION BACK
         # ---------------------------------------------------------
 
         theme_sentiment_counts = (
@@ -584,14 +600,14 @@ if all(
 
 
         # ---------------------------------------------------------
-        # SORT THEMES BY FREQUENCY
-        # Largest theme appears at top
+        # SORT BY TOTAL THEME SHARE
+        # Largest theme at bottom/top depending Plotly orientation
         # ---------------------------------------------------------
 
         theme_order = (
             theme_summary
             .sort_values(
-                "theme_total",
+                "theme_share",
                 ascending=True
             )["theme_label"]
             .tolist()
@@ -605,19 +621,23 @@ if all(
         st.caption(
             f"Based on {specific_feedback_total:,} reviews containing "
             f"a specific feedback theme for Indie {selected_genre} games. "
-            f"General positive and negative feedback are excluded. "
-            f"Each bar adds up to 100%."
+            f"Bar length represents how common each theme is, while the "
+            f"percentages inside each bar show the positive vs negative "
+            f"split within that theme."
         )
 
 
         # ---------------------------------------------------------
-        # CHART
+        # STACKED BAR CHART
         # ---------------------------------------------------------
 
         fig_theme = px.bar(
             theme_sentiment_counts,
 
-            x="within_theme_percentage",
+            # IMPORTANT:
+            # This controls bar LENGTH
+            x="overall_segment_percentage",
+
             y="theme_label",
 
             color="recommendation_polarity",
@@ -626,10 +646,13 @@ if all(
 
             barmode="stack",
 
+            # IMPORTANT:
+            # This controls the number shown inside
             text="within_theme_percentage",
 
             category_orders={
                 "theme_label": theme_order,
+
                 "recommendation_polarity": [
                     "Positive",
                     "Negative"
@@ -647,8 +670,8 @@ if all(
             ),
 
             labels={
-                "within_theme_percentage":
-                    "% Within Theme",
+                "overall_segment_percentage":
+                    "% of Specific Feedback",
 
                 "theme_label":
                     "Feedback Theme",
@@ -659,6 +682,7 @@ if all(
 
             custom_data=[
                 "review_count",
+                "within_theme_percentage",
                 "theme_share"
             ]
         )
@@ -674,6 +698,7 @@ if all(
 
             textposition="inside",
 
+            # Centre the percentage within its OWN segment
             insidetextanchor="middle",
 
             textfont=dict(
@@ -684,12 +709,24 @@ if all(
             hovertemplate=(
                 "<b>%{y}</b><br>"
                 "Recommendation: %{fullData.name}<br>"
-                "Within this theme: %{x:.1f}%<br>"
                 "Reviews: %{customdata[0]:,}<br>"
-                "Share of all specific feedback: "
-                "%{customdata[1]:.1f}%"
+                "Within this theme: "
+                "%{customdata[1]:.1f}%<br>"
+                "Theme share of all specific feedback: "
+                "%{customdata[2]:.1f}%"
                 "<extra></extra>"
             )
+        )
+
+
+        # ---------------------------------------------------------
+        # X-AXIS RANGE
+        #
+        # Longest bar determines chart scale
+        # ---------------------------------------------------------
+
+        max_theme_share = (
+            theme_summary["theme_share"].max()
         )
 
 
@@ -704,18 +741,23 @@ if all(
             barmode="stack",
 
             xaxis=dict(
-                range=[0, 100],
-                tickmode="linear",
-                dtick=10,
+                range=[
+                    0,
+                    max(
+                        max_theme_share * 1.10,
+                        10
+                    )
+                ],
+
                 ticksuffix="%"
             ),
 
             xaxis_title=(
-                "Positive vs Negative Share Within Theme"
+                "% of Specific Feedback"
             ),
 
             yaxis_title=(
-                "Feedback Theme (% of Specific Feedback)"
+                "Feedback Theme"
             ),
 
             legend_title_text=(
