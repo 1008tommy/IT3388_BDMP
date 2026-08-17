@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import shap
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.metrics import r2_score, root_mean_squared_error, mean_absolute_error
 from sklearn.model_selection import train_test_split
 
 st.set_page_config(page_title="Indie Game Pricing", layout="wide")
@@ -77,7 +77,10 @@ for (name, model), col in zip(
 ):
     y_pred = model.predict(X_test)
     r2   = r2_score(y_test, y_pred)
-    rmse = mean_squared_error(y_test, y_pred, squared=False)
+    rmse = root_mean_squared_error(
+        y_test,
+        y_pred,
+    )
     mae  = mean_absolute_error(y_test, y_pred)
 
     with col:
@@ -109,7 +112,7 @@ for (name, model), col in zip(
 #     ):
 #         y_pred = model.predict(X_test)
 #         r2   = r2_score(y_test, y_pred)
-#         rmse = mean_squared_error(y_test, y_pred, squared=False)
+#         rmse = root_mean_squared_error(y_test, y_pred, squared=False)
 #         mae  = mean_absolute_error(y_test, y_pred)
 
 #         with col:
