@@ -15,26 +15,30 @@ WAREHOUSE_ID = os.getenv(
     "DATABRICKS_WAREHOUSE_ID"
 )
 
-MLFLOW_EXPERIMENT = "/Users/242475r@mymail.nyp.edu.sg/IT3388_BDMP/game_performance_models"
+# Get Databricks host from environment
+DATABRICKS_HOST = os.getenv("DATABRICKS_HOST", "https://dbc-43c2261c-2c09.cloud.databricks.com")
 
 # =========================================================
-# DEBUG: Check MLflow Setup
+# SETUP MLFLOW TO USE DATABRICKS TRACKING
 # =========================================================
+
+# Set MLflow tracking URI to Databricks workspace
+mlflow.set_tracking_uri("databricks")
 
 st.write("### MLflow Connection Check")
-
-# Check MLflow tracking URI
 st.write(f"MLflow Tracking URI: {mlflow.get_tracking_uri()}")
 
+MLFLOW_EXPERIMENT = "/Users/242475r@mymail.nyp.edu.sg/IT3388_BDMP/game_performance_models"
+
 try:
-    # Try to get experiment by name
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    
     experiment = mlflow.get_experiment_by_name(MLFLOW_EXPERIMENT)
     
     if experiment:
         st.write(f"✅ Experiment found: {experiment.experiment_id}")
-        st.write(f"Experiment name: {experiment.name}")
         
-        # Search runs using experiment_id
+        # Search runs
         all_runs = mlflow.search_runs(
             experiment_ids=[experiment.experiment_id],
             order_by=["start_time DESC"]
@@ -44,17 +48,11 @@ try:
         
         if len(all_runs) > 0:
             st.write("### Available Runs:")
-            st.dataframe(all_runs[['run_id', 'tags.mlflow.runName', 'metrics.test_r2', 'start_time']])
+            st.dataframe(all_runs[['run_id', 'tags.mlflow.runName', 'metrics.test_r2']])
         else:
-            st.write("⚠️ No runs found in experiment")
+            st.write("⚠️ No runs in experiment")
     else:
-        st.write(f"❌ Experiment not found: {MLFLOW_EXPERIMENT}")
+        st.write(f"❌ Experiment not found")
         
-        # List all experiments
-        st.write("\n### Available experiments:")
-        all_experiments = mlflow.search_experiments()
-        for exp in all_experiments:
-            st.write(f"- {exp.name} (ID: {exp.experiment_id})")
-            
 except Exception as e:
     st.error(f"Error: {str(e)}")
