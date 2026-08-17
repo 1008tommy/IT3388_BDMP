@@ -1136,3 +1136,350 @@ else:
 
 
 st.divider()
+
+# =========================================================
+# CHART 3
+# FEEDBACK THEME DISTRIBUTION ACROSS INDIE GENRES
+# HEATMAP
+# =========================================================
+
+st.header("How Do Feedback Priorities Differ Across Indie Genres?")
+
+st.write(
+    """
+    This heatmap compares the distribution of specific feedback themes
+    across Indie game genres. Each row represents a genre, while each
+    column represents a feedback theme.
+
+    The percentage in each cell shows how much of that genre's specific
+    feedback belongs to the corresponding theme. This allows recurring
+    player priorities and differences between genres to be identified.
+    """
+)
+
+
+# ---------------------------------------------------------
+# GENRES USED IN MODELLING
+# ---------------------------------------------------------
+
+MODEL_GENRES = [
+    "Action",
+    "Adventure",
+    "Casual",
+    "Simulation",
+    "Strategy",
+    "RPG"
+]
+
+
+# ---------------------------------------------------------
+# SPECIFIC FEEDBACK THEMES
+# ---------------------------------------------------------
+
+SPECIFIC_THEMES = [
+    "Gameplay and balance",
+    "Story and characters",
+    "Content and replayability",
+    "User interface and usability",
+    "Technical performance and bugs",
+    "Pricing and value",
+    "Multiplayer and online",
+    "Graphics, art and audio"
+]
+
+
+# ---------------------------------------------------------
+# CHECK REQUIRED COLUMNS
+# ---------------------------------------------------------
+
+if all(
+    column in df.columns
+    for column in [
+        "game_type",
+        "primary_genre",
+        "main_theme"
+    ]
+):
+
+    # ---------------------------------------------------------
+    # KEEP ONLY INDIE + MODELLED GENRES + SPECIFIC THEMES
+    # ---------------------------------------------------------
+
+    heatmap_df = df[
+        (df["game_type"] == "Indie")
+        & (df["primary_genre"].isin(MODEL_GENRES))
+        & (df["main_theme"].isin(SPECIFIC_THEMES))
+    ].copy()
+
+
+    # ---------------------------------------------------------
+    # COUNT REVIEWS FOR EACH GENRE × THEME
+    # ---------------------------------------------------------
+
+    genre_theme_counts = (
+        heatmap_df
+        .groupby(
+            [
+                "primary_genre",
+                "main_theme"
+            ]
+        )
+        .size()
+        .reset_index(
+            name="review_count"
+        )
+    )
+
+
+    # ---------------------------------------------------------
+    # TOTAL SPECIFIC FEEDBACK WITHIN EACH GENRE
+    # ---------------------------------------------------------
+
+    genre_theme_counts[
+        "genre_total"
+    ] = (
+        genre_theme_counts
+        .groupby("primary_genre")[
+            "review_count"
+        ]
+        .transform("sum")
+    )
+
+
+    # ---------------------------------------------------------
+    # % OF SPECIFIC FEEDBACK WITHIN EACH GENRE
+    #
+    # Each genre adds up to approximately 100%.
+    # ---------------------------------------------------------
+
+    genre_theme_counts[
+        "percentage"
+    ] = (
+        genre_theme_counts[
+            "review_count"
+        ]
+        / genre_theme_counts[
+            "genre_total"
+        ]
+        * 100
+    )
+
+
+    # ---------------------------------------------------------
+    # CREATE HEATMAP MATRIX
+    # ---------------------------------------------------------
+
+    heatmap_matrix = (
+        genre_theme_counts
+        .pivot(
+            index="primary_genre",
+            columns="main_theme",
+            values="percentage"
+        )
+        .reindex(
+            index=MODEL_GENRES,
+            columns=SPECIFIC_THEMES
+        )
+        .fillna(0)
+    )
+
+
+    # ---------------------------------------------------------
+    # SHORTER DISPLAY NAMES
+    # Makes the heatmap easier to read
+    # ---------------------------------------------------------
+
+    display_names = {
+        "Gameplay and balance":
+            "Gameplay & Balance",
+
+        "Story and characters":
+            "Story & Characters",
+
+        "Content and replayability":
+            "Content & Replayability",
+
+        "User interface and usability":
+            "UI & Usability",
+
+        "Technical performance and bugs":
+            "Technical Bugs",
+
+        "Pricing and value":
+            "Pricing & Value",
+
+        "Multiplayer and online":
+            "Multiplayer & Online",
+
+        "Graphics, art and audio":
+            "Graphics / Art / Audio"
+    }
+
+
+    heatmap_matrix.columns = [
+        display_names[column]
+        for column in heatmap_matrix.columns
+    ]
+
+
+    # ---------------------------------------------------------
+    # HEATMAP
+    # ---------------------------------------------------------
+
+    fig_heatmap = px.imshow(
+
+        heatmap_matrix,
+
+        text_auto=".1f",
+
+        aspect="auto",
+
+        color_continuous_scale="Blues",
+
+        title=(
+            "Distribution of Feedback Themes "
+            "Across Indie Game Genres"
+        ),
+
+        labels={
+            "x": "Feedback Theme",
+            "y": "Primary Genre",
+            "color": "% of Feedback"
+        }
+    )
+
+
+    # ---------------------------------------------------------
+    # CELL LABELS + HOVER
+    # ---------------------------------------------------------
+
+    fig_heatmap.update_traces(
+
+        texttemplate="%{z:.1f}%",
+
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Theme: %{x}<br>"
+            "Share of genre feedback: "
+            "%{z:.1f}%"
+            "<extra></extra>"
+        )
+    )
+
+
+    # ---------------------------------------------------------
+    # LAYOUT
+    # ---------------------------------------------------------
+
+    fig_heatmap.update_layout(
+
+        height=600,
+
+        xaxis_title=(
+            "Feedback Theme"
+        ),
+
+        yaxis_title=(
+            "Indie Primary Genre"
+        ),
+
+        coloraxis_colorbar=dict(
+            title="% of<br>Feedback",
+            ticksuffix="%"
+        ),
+
+        xaxis=dict(
+            tickangle=-30
+        )
+    )
+
+
+    st.plotly_chart(
+        fig_heatmap,
+        width="stretch"
+    )
+
+
+    # ---------------------------------------------------------
+    # EXPLANATION
+    # ---------------------------------------------------------
+
+    st.caption(
+        "Percentages are calculated separately within each genre "
+        "after excluding General positive feedback and General "
+        "negative feedback. Therefore, each genre row adds up to "
+        "approximately 100%."
+    )
+
+
+    # ---------------------------------------------------------
+    # IDENTIFY DOMINANT THEME FOR EACH GENRE
+    # ---------------------------------------------------------
+
+    dominant_themes = (
+        genre_theme_counts
+        .sort_values(
+            [
+                "primary_genre",
+                "percentage"
+            ],
+            ascending=[
+                True,
+                False
+            ]
+        )
+        .groupby(
+            "primary_genre",
+            as_index=False
+        )
+        .first()
+    )
+
+
+    # Keep genres in modelling order
+    dominant_themes[
+        "primary_genre"
+    ] = pd.Categorical(
+        dominant_themes[
+            "primary_genre"
+        ],
+        categories=MODEL_GENRES,
+        ordered=True
+    )
+
+
+    dominant_themes = (
+        dominant_themes
+        .sort_values(
+            "primary_genre"
+        )
+    )
+
+
+    # ---------------------------------------------------------
+    # SIMPLE SUMMARY BELOW HEATMAP
+    # ---------------------------------------------------------
+
+    st.subheader(
+        "Most Discussed Feedback Theme by Genre"
+    )
+
+
+    for _, row in dominant_themes.iterrows():
+
+        st.write(
+            f"**{row['primary_genre']}** — "
+            f"{row['main_theme']} "
+            f"({row['percentage']:.1f}% of specific feedback)"
+        )
+
+
+else:
+
+    st.warning(
+        "The game_type, primary_genre or main_theme "
+        "column is not available."
+    )
+
+
+st.divider()
