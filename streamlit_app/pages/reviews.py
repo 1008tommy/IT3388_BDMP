@@ -1751,7 +1751,7 @@ if st.button(
                 st.dataframe(
                     score_df,
                     hide_index=True,
-                    width="stretch"
+                    use_container_width=True
                 )
 
 
