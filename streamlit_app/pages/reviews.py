@@ -1486,6 +1486,8 @@ st.write(
 # MODEL LOCATION
 # ---------------------------------------------------------
 
+import mlflow
+
 MODEL_RUN_ID = "0bf150ccb69f499685bd83b0bdad9019"
 
 MODEL_URI = (
@@ -1495,16 +1497,26 @@ MODEL_URI = (
 
 
 # ---------------------------------------------------------
+# IMPORTANT:
+# USE DATABRICKS-HOSTED MLFLOW TRACKING SERVER
+# ---------------------------------------------------------
+
+mlflow.set_tracking_uri("databricks")
+
+
+# ---------------------------------------------------------
 # LOAD MODEL ONCE
-#
-# cache_resource prevents Streamlit from loading the large
-# ModernBERT model again every time the page reruns.
 # ---------------------------------------------------------
 
 @st.cache_resource
 def load_review_classifier():
 
+    import mlflow
     import mlflow.transformers
+
+    # Explicitly ensure MLflow is looking at Databricks,
+    # not a local MLflow database.
+    mlflow.set_tracking_uri("databricks")
 
     classifier = mlflow.transformers.load_model(
         MODEL_URI,
@@ -1552,6 +1564,7 @@ PREDICTION_THRESHOLD = 0.50
 
 review_input = st.text_area(
     "Enter a Steam review",
+    key="review_classifier_input",
     placeholder=(
         "Example: The combat is really fun, but the game "
         "keeps crashing and the frame rate drops during fights."
