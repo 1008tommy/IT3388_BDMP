@@ -8,33 +8,47 @@ import shap
 from sklearn.metrics import r2_score, root_mean_squared_error, mean_absolute_error
 from sklearn.model_selection import train_test_split
 
-st.set_page_config(page_title="Indie Game Pricing Strategy", layout="wide")
-
 # -- Config --------------------------------------------------------------------
 PYCARET_RUN_URI = "runs:/3e9c0f4b46e846faba9cacdaaa1aae24/model"
-RF_RUN_URI      = "runs:/99c1924e7e674d659dad7348bd0db61b/model"
-GOLD_PATH       = "/Volumes/darren/default/it3388/gold_price_summary.csv"
-METADATA_PATH   = "/Volumes/darren/default/it3388/silver_game_metadata.csv"
-RAW_LIST_COLS   = ["supported_languages", "full_audio_languages", "developers",
-                   "publishers", "categories", "genres", "tags"]
+RF_RUN_URI = "runs:/99c1924e7e674d659dad7348bd0db61b/model"
+GOLD_PATH = "/Volumes/darren/default/it3388/gold_price_summary.csv"
+METADATA_PATH = "/Volumes/darren/default/it3388/silver_game_metadata.csv"
+RAW_LIST_COLS = ["supported_languages", "full_audio_languages", "developers", "publishers", "categories", "genres", "tags"]
+
 
 # -- Load Data -----------------------------------------------------------------
 @st.cache_data
 def load_data():
-    gold = pd.read_csv(GOLD_PATH).astype({
-        "steam_id": "int64", "launch_price": "float64",
-        "launched_with_discount": "bool", "min_price": "float64",
-        "max_price": "float64", "min_base_price": "float64",
-        "max_base_price": "float64", "avg_discount_pct": "float64",
-        "pct_time_discounted": "float64", "n_discount_events": "int64",
-        "price_volatility": "int64", "n_price_changes": "int64",
-        "has_price_history": "bool",
-    }).dropna()
+    gold = (
+        pd.read_csv(GOLD_PATH)
+        .astype(
+            {
+                "steam_id": "int64",
+                "launch_price": "float64",
+                "launched_with_discount": "bool",
+                "min_price": "float64",
+                "max_price": "float64",
+                "min_base_price": "float64",
+                "max_base_price": "float64",
+                "avg_discount_pct": "float64",
+                "pct_time_discounted": "float64",
+                "n_discount_events": "int64",
+                "price_volatility": "int64",
+                "n_price_changes": "int64",
+                "has_price_history": "bool",
+            }
+        )
+        .dropna()
+    )
 
-    meta = pd.read_csv(METADATA_PATH).astype({
-        "app_id": "int64", "name": "string",
-        "release_date": "datetime64[ns]", "estimated_owners": "string",
-    })
+    meta = pd.read_csv(METADATA_PATH).astype(
+        {
+            "app_id": "int64",
+            "name": "string",
+            "release_date": "datetime64[ns]",
+            "estimated_owners": "string",
+        }
+    )
 
     price_df = meta.merge(gold, left_on="app_id", right_on="steam_id")
     price_df = price_df[price_df["launch_price"] != 0].drop(columns=RAW_LIST_COLS, errors="ignore")
@@ -42,29 +56,148 @@ def load_data():
     genre_dummy_cols = [c for c in price_df.columns if c.startswith("genres_")]
     price_df["review_ratio"] = price_df["positive"] / (price_df["positive"] + price_df["negative"]).replace(0, np.nan)
 
-    scope   = ["platform_count", "supported_languages_count", "audio_languages_count",
-               "category_count", "genre_count", "tag_count", "total_tag_votes",
-               "tag_diversity", "dlc_count", "achievements"]
-    control = ["positive", "negative", "average_playtime_forever", "median_playtime_forever",
-               "peak_ccu", "recommendations", "days_since_release"]
+    scope = ["platform_count", "supported_languages_count", "audio_languages_count", "category_count", "genre_count", "tag_count", "total_tag_votes", "tag_diversity", "dlc_count", "achievements"]
+    control = ["positive", "negative", "average_playtime_forever", "median_playtime_forever", "peak_ccu", "recommendations", "days_since_release"]
     feature_names = scope + control + genre_dummy_cols + ["review_ratio"]
 
     price_df = price_df.dropna()
     X, y = price_df[feature_names], price_df["launch_price"]
     _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    return price_df, X_test, y_test, feature_names
+    return price_df, X_test, y_test, feature_names, genre_dummy_cols
 
 
-price_df, X_test, y_test, feature_names = load_data()
+price_df, X_test, y_test, feature_names, genre_dummy_cols = load_data()
 
-# -- Data ----------------------------------------------------------------------
-st.header("Overview of Indie Games")
-overview_cols = st.columns(3)
+# -- Overview ------------------------------------------------------------------
+st.header("📊 Overview of Indie Games")
 
-overview_cols[0].metric("Number of unique games", f"{price_df['steam_id'].nunique():,}")
-overview_cols[1].metric("Median launch price", f"${price_df['launch_price'].median():.2f}")
+total_games = price_df["steam_id"].nunique()
+median_price = price_df["launch_price"].median()
+mean_price = price_df["launch_price"].mean()
 discount_pct = price_df["launched_with_discount"].mean() * 100
-overview_cols[2].metric("Games launched with discount", f"{discount_pct:.1f}%")
+dlc_pct = (price_df["dlc_count"] > 0).mean() * 100
+median_achievements = price_df["achievements"].median()
+
+overview_cols = st.columns(6)
+overview_cols[0].metric("Games analyzed", f"{total_games:,}")
+overview_cols[1].metric("Median launch price", f"${median_price:.2f}")
+overview_cols[2].metric("Mean launch price", f"${mean_price:.2f}")
+overview_cols[3].metric("Launched with discount", f"{discount_pct:.1f}%")
+overview_cols[4].metric("Games with DLC", f"{dlc_pct:.1f}%")
+overview_cols[5].metric("Median achievements", f"{median_achievements:.0f}")
+
+# -- Price Distribution --------------------------------------------------------
+st.header("💰 Launch Price Distribution")
+
+fig, ax = plt.subplots(figsize=(10, 5))
+
+prices = price_df["launch_price"]
+
+ax.hist(prices, bins=50, alpha=0.75)
+
+ax.set_xscale("log")
+ax.set_xlabel("Launch Price ($) — log scale")
+ax.set_ylabel("Number of Games")
+ax.set_title("Distribution of Indie Game Launch Prices")
+
+st.pyplot(fig, use_container_width=True)
+plt.close(fig)
+
+# -- Genre Pricing -------------------------------------------------------------
+st.header("🎮 Genre and Launch Price")
+
+genre_rows = []
+
+for genre_col in genre_dummy_cols:
+    genre_name = genre_col.replace("genres_", "").replace("_", " ").title()
+
+    genre_games = price_df[price_df[genre_col] == 1]
+
+    if len(genre_games) >= 20:
+        genre_rows.append(
+            {
+                "Genre": genre_name,
+                "Median Price": genre_games["launch_price"].median(),
+                "Mean Price": genre_games["launch_price"].mean(),
+                "Games": len(genre_games),
+            }
+        )
+
+genre_df = pd.DataFrame(genre_rows).sort_values("Median Price", ascending=True)
+
+fig, ax = plt.subplots(figsize=(10, max(5, len(genre_df) * 0.35)))
+
+ax.barh(genre_df["Genre"], genre_df["Median Price"])
+
+ax.set_xlabel("Median Launch Price ($)")
+ax.set_ylabel("Genre")
+ax.set_title("Median Launch Price by Genre")
+
+st.pyplot(fig, use_container_width=True)
+plt.close(fig)
+
+st.dataframe(
+    genre_df.sort_values("Median Price", ascending=False),
+    use_container_width=True,
+    hide_index=True,
+)
+
+# -- Game Scope vs Price -------------------------------------------------------
+st.header("🎯 Game Scope and Launch Price")
+
+scope_cols = st.columns(3)
+
+scope_features = [
+    ("achievements", "Achievements"),
+    ("dlc_count", "DLC Count"),
+    ("platform_count", "Platform Count"),
+]
+
+for col, (feature, label) in zip(scope_cols, scope_features):
+    with col:
+        fig, ax = plt.subplots(figsize=(5, 4))
+
+        ax.scatter(price_df[feature], price_df["launch_price"], alpha=0.25, s=12)
+
+        ax.set_xlabel(label)
+        ax.set_ylabel("Launch Price ($)")
+        ax.set_title(f"{label} vs Launch Price")
+
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+# -- Discount Strategy ---------------------------------------------------------
+st.header("🏷️ Discount Strategy")
+
+discount_cols = st.columns(4)
+discount_cols[0].metric("Games launched with discount", f"{discount_pct:.1f}%")
+discount_cols[1].metric("Average discount", f"{price_df['avg_discount_pct'].mean():.1f}%")
+discount_cols[2].metric("Median time discounted", f"{price_df['pct_time_discounted'].median():.1f}%")
+discount_cols[3].metric("Median discount events", f"{price_df['n_discount_events'].median():.0f}")
+
+fig, ax = plt.subplots(figsize=(9, 5))
+
+ax.scatter(price_df["launch_price"], price_df["avg_discount_pct"], alpha=0.25, s=12)
+
+ax.set_xscale("log")
+ax.set_xlabel("Launch Price ($) — log scale")
+ax.set_ylabel("Average Discount (%)")
+ax.set_title("Launch Price vs Average Discount")
+
+st.pyplot(fig, use_container_width=True)
+plt.close(fig)
+
+fig, ax = plt.subplots(figsize=(9, 5))
+
+ax.scatter(price_df["n_discount_events"], price_df["launch_price"], alpha=0.25, s=12)
+
+ax.set_yscale("log")
+ax.set_xlabel("Number of Discount Events")
+ax.set_ylabel("Launch Price ($) — log scale")
+ax.set_title("Discount Frequency vs Launch Price")
+
+st.pyplot(fig, use_container_width=True)
+plt.close(fig)
 
 
 # -- Models --------------------------------------------------------------------
@@ -76,30 +209,32 @@ def load_models():
         mlflow.sklearn.load_model(RF_RUN_URI),
     )
 
+
 pycaret_model, rf_model = load_models()
 
-st.title("💰 Indie Game Pricing Strategy")
+st.header("💰 Indie Game Pricing Strategy")
 st.write("Explore how game features, scope and other characteristics are associated with indie game pricing.")
 
 st.header("Models and model performance")
 model_cols = st.columns(2)
 for (name, model), col in zip(
-    [("PyCaret Best Model", pycaret_model), ("Random Forest", rf_model)], model_cols
+    [("PyCaret Best Model", pycaret_model), ("Random Forest", rf_model)],
+    model_cols,
 ):
     y_pred = model.predict(X_test)
-    r2   = r2_score(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
     rmse = root_mean_squared_error(
         y_test,
         y_pred,
     )
-    mae  = mean_absolute_error(y_test, y_pred)
+    mae = mean_absolute_error(y_test, y_pred)
 
     with col:
         st.subheader(name)
         m1, m2, m3 = st.columns(3)
-        m1.metric("R²",   f"{r2:.4f}")
+        m1.metric("R²", f"{r2:.4f}")
         m2.metric("RMSE", f"${rmse:.2f}")
-        m3.metric("MAE",  f"${mae:.2f}")
+        m3.metric("MAE", f"${mae:.2f}")
 
         fig, ax = plt.subplots(figsize=(5, 4))
         ax.scatter(y_test, y_pred, alpha=0.3, s=15, color="steelblue")
@@ -144,7 +279,13 @@ st.pyplot(plt.gcf(), use_container_width=True)
 plt.clf()
 
 st.markdown("**Bar — mean |SHAP| per feature**")
-shap.summary_plot(shap_values, X_shap, feature_names=feature_names, plot_type="bar", show=False)
+shap.summary_plot(
+    shap_values,
+    X_shap,
+    feature_names=feature_names,
+    plot_type="bar",
+    show=False,
+)
 st.pyplot(plt.gcf(), use_container_width=True)
 plt.clf()
 
