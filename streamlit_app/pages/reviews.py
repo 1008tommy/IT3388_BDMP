@@ -373,72 +373,64 @@ st.divider()
 
 # =========================================================
 # CHART 1
-# FEEDBACK THEME DISTRIBUTION BY GENRE
+# KEY FEEDBACK THEMES BY INDIE PRIMARY GENRE
 # =========================================================
 
-st.header("1. What Feedback Do Players Give for Different Genres?")
+st.header("1. What Feedback Themes Should Indie Developers Look Out For?")
 
 st.write(
     """
-    Select a game genre to explore the feedback themes most commonly
-    discussed by players. This allows indie developers to understand
-    the typical praise, complaints and expectations associated with
-    games similar to the one they are developing.
+    Select an indie game genre to see the specific feedback themes
+    most commonly discussed by players. General positive and negative
+    feedback are excluded so that the chart focuses on more actionable
+    areas such as gameplay, technical issues, content, story and pricing.
     """
 )
 
 
 # ---------------------------------------------------------
-# PREPARE GENRE DATA
+# GENRES USED IN THE MODELLING / SAMPLING PLAN
 # ---------------------------------------------------------
 
-if "genre_list" in df.columns:
-
-    genre_review_df = (
-        df[
-            [
-                "genre_list",
-                "main_theme"
-            ]
-        ]
-        .explode("genre_list")
-        .rename(
-            columns={
-                "genre_list": "genre"
-            }
-        )
-    )
+MODEL_GENRES = [
+    "Action",
+    "Adventure",
+    "Casual",
+    "Simulation",
+    "Strategy",
+    "RPG"
+]
 
 
-    # Clean genre values
-    genre_review_df["genre"] = (
-        genre_review_df["genre"]
-        .astype(str)
-        .str.strip()
-    )
+# ---------------------------------------------------------
+# PREPARE INDIE REVIEW DATA
+# ---------------------------------------------------------
 
+if (
+    "primary_genre" in df.columns
+    and "game_type" in df.columns
+):
 
-    # Remove empty genre values
-    genre_review_df = genre_review_df[
-        (genre_review_df["genre"] != "")
-        & genre_review_df["main_theme"].notna()
-    ]
+    indie_genre_df = df[
+        (df["game_type"] == "Indie")
+        & (df["primary_genre"].isin(MODEL_GENRES))
+        & (df["main_theme"].notna())
+    ].copy()
 
 
     # ---------------------------------------------------------
-    # REMOVE INDIE / NON-INDIE FROM GENRE FILTER
+    # REMOVE GENERAL FEEDBACK
     # ---------------------------------------------------------
 
-    excluded_genres = [
-        "Indie",
-        "Non-Indie",
-        "Non Indie"
+    general_themes = [
+        "General positive feedback",
+        "General negative feedback"
     ]
 
 
-    genre_review_df = genre_review_df[
-        ~genre_review_df["genre"].isin(
-            excluded_genres
+    indie_genre_df = indie_genre_df[
+        ~indie_genre_df["main_theme"].isin(
+            general_themes
         )
     ]
 
@@ -447,31 +439,33 @@ if "genre_list" in df.columns:
     # GENRE SELECTOR
     # ---------------------------------------------------------
 
-    genre_options = sorted(
-        genre_review_df["genre"]
-        .dropna()
-        .unique()
-    )
+    available_genres = [
+        genre
+        for genre in MODEL_GENRES
+        if genre in indie_genre_df[
+            "primary_genre"
+        ].unique()
+    ]
 
 
     selected_genre = st.selectbox(
-        "🎮 Select a genre",
-        genre_options
+        "🎮 Select an indie genre",
+        available_genres
     )
 
 
     # ---------------------------------------------------------
-    # FILTER REVIEWS TO SELECTED GENRE
+    # FILTER TO SELECTED PRIMARY GENRE
     # ---------------------------------------------------------
 
-    selected_genre_df = genre_review_df[
-        genre_review_df["genre"]
+    selected_genre_df = indie_genre_df[
+        indie_genre_df["primary_genre"]
         == selected_genre
     ].copy()
 
 
     # ---------------------------------------------------------
-    # COUNT FEEDBACK THEMES
+    # COUNT SPECIFIC FEEDBACK THEMES
     # ---------------------------------------------------------
 
     theme_counts = (
@@ -484,7 +478,7 @@ if "genre_list" in df.columns:
     )
 
 
-    # Calculate percentage within selected genre
+    # Percentage among SPECIFIC themes only
     theme_counts["percentage"] = (
         theme_counts["review_count"]
         / theme_counts["review_count"].sum()
@@ -492,11 +486,10 @@ if "genre_list" in df.columns:
     )
 
 
-    # Sort so largest bar appears at top
     theme_counts = (
         theme_counts
         .sort_values(
-            "review_count",
+            "percentage",
             ascending=True
         )
     )
@@ -508,22 +501,21 @@ if "genre_list" in df.columns:
 
     fig_theme = px.bar(
         theme_counts,
-
         x="percentage",
         y="main_theme",
-
         orientation="h",
-
         text="percentage",
 
         title=(
-            f"Player Feedback Theme Distribution "
-            f"for {selected_genre} Games"
+            f"Key Feedback Themes for "
+            f"Indie {selected_genre} Games"
         ),
 
         labels={
-            "percentage": "% of Reviews",
-            "main_theme": "Feedback Theme"
+            "percentage":
+                "% of Specific Feedback",
+            "main_theme":
+                "Feedback Theme"
         }
     )
 
@@ -535,10 +527,20 @@ if "genre_list" in df.columns:
 
 
     fig_theme.update_layout(
-        height=550,
+        height=500,
+
         yaxis={
-            "categoryorder": "total ascending"
-        }
+            "categoryorder":
+                "total ascending"
+        },
+
+        xaxis_title=(
+            "% of Specific Feedback"
+        ),
+
+        yaxis_title=(
+            "Feedback Theme"
+        )
     )
 
 
@@ -549,48 +551,77 @@ if "genre_list" in df.columns:
 
 
     # ---------------------------------------------------------
-    # SIMPLE INSIGHT
+    # DEVELOPER INSIGHT
     # ---------------------------------------------------------
 
     if not theme_counts.empty:
 
-        top_theme_row = (
+        ranked_themes = (
             theme_counts
             .sort_values(
                 "percentage",
                 ascending=False
             )
-            .iloc[0]
+            .reset_index(drop=True)
         )
 
 
         top_theme = (
-            top_theme_row["main_theme"]
+            ranked_themes
+            .iloc[0]["main_theme"]
         )
 
         top_percentage = (
-            top_theme_row["percentage"]
+            ranked_themes
+            .iloc[0]["percentage"]
         )
 
 
-        st.info(
-            f"""
-            **Developer Insight:** For **{selected_genre}** games,
-            **{top_theme}** is the most commonly identified feedback
-            theme, accounting for approximately **{top_percentage:.1f}%**
-            of classified feedback.
+        # Second most common theme
+        if len(ranked_themes) > 1:
 
-            Indie developers building a {selected_genre} game can use
-            this as a reference for areas that players frequently pay
-            attention to when reviewing similar games.
-            """
-        )
+            second_theme = (
+                ranked_themes
+                .iloc[1]["main_theme"]
+            )
+
+            second_percentage = (
+                ranked_themes
+                .iloc[1]["percentage"]
+            )
+
+            st.info(
+                f"""
+                **Developer Insight:** Among specific feedback for
+                **Indie {selected_genre} games**, the most frequently
+                discussed area is **{top_theme}**
+                (**{top_percentage:.1f}%**), followed by
+                **{second_theme}**
+                (**{second_percentage:.1f}%**).
+
+                Developers creating an Indie {selected_genre} game
+                may want to pay particular attention to these areas
+                when studying similar games and planning improvements.
+                """
+            )
+
+        else:
+
+            st.info(
+                f"""
+                **Developer Insight:** The most frequently discussed
+                specific feedback area for **Indie {selected_genre}
+                games** is **{top_theme}**, representing approximately
+                **{top_percentage:.1f}%** of specific feedback.
+                """
+            )
 
 
 else:
 
     st.warning(
-        "Genre information is not available in the review dataset."
+        "The primary_genre or game_type column "
+        "is not available."
     )
 
 
