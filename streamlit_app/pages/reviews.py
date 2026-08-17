@@ -12,7 +12,7 @@ from databricks.sdk.core import Config
 
 TABLE_NAME = os.getenv(
     "REVIEW_TABLE",
-    "workspace.it3388.gold_review_analysis_final"
+    "it3388.it3388.gold_review_analysis_final"
 )
 
 WAREHOUSE_ID = os.getenv(
