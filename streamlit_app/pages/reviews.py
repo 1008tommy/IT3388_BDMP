@@ -100,6 +100,7 @@ def load_review_data():
             "app_id",
             "name",
             "game_type",
+            "primary_genre",   # ADD THIS
             "genres",
             "price",
             "peak_ccu",
