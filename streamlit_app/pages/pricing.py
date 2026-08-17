@@ -1,6 +1,5 @@
 import streamlit as st
 
-
 st.title("💰 Indie Game Pricing Strategy")
 
 st.write(
@@ -10,9 +9,10 @@ st.write(
     """
 )
 
+st.header("Pricing Overview")
 
-st.subheader("Pricing Overview")
+st.subheader("Models")
 
-st.info(
-    "Pricing visualisations and model results will be added here."
-)
+st.write("Using pycaret, I trained models")
+
+st.write("another line")
