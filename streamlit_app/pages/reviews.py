@@ -259,7 +259,7 @@ if "genres" in df.columns:
 # PAGE HEADER
 # =========================================================
 
-st.title("💬 Player Review Analysis")
+st.title("Player Review Analysis")
 
 st.write(
     """
@@ -272,39 +272,10 @@ st.write(
 
 
 # =========================================================
-# ANALYSIS SCOPE
-# =========================================================
-
-scope_df = df.copy()
-
-
-if "game_type" in df.columns:
-
-    available_game_types = sorted(
-        df["game_type"]
-        .dropna()
-        .astype(str)
-        .unique()
-    )
-
-    scope_option = st.selectbox(
-        "Analysis scope",
-        ["All games"] + available_game_types
-    )
-
-    if scope_option != "All games":
-
-        scope_df = df[
-            df["game_type"].astype(str)
-            == scope_option
-        ].copy()
-
-
-# =========================================================
 # OVERVIEW METRICS
 # =========================================================
 
-st.header("📊 Review Overview")
+st.header("Review Overview")
 
 
 # Total reviews
