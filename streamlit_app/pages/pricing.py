@@ -8,8 +8,6 @@ import shap
 from sklearn.metrics import r2_score, root_mean_squared_error, mean_absolute_error
 from sklearn.model_selection import train_test_split
 
-st.set_page_config(page_title="Indie Game Pricing Strategy", layout="wide")
-
 # -- Config --------------------------------------------------------------------
 PYCARET_RUN_URI = "runs:/3e9c0f4b46e846faba9cacdaaa1aae24/model"
 RF_RUN_URI = "runs:/99c1924e7e674d659dad7348bd0db61b/model"
