@@ -1648,9 +1648,6 @@ def predict_review(
 
 # =========================================================
 # CLASSIFIER UI
-#
-# Fragment means clicking Analyse Review only reruns
-# this section instead of rerunning the entire dashboard.
 # =========================================================
 
 @st.fragment
@@ -1671,35 +1668,48 @@ def review_classifier_section():
 
 
     # ---------------------------------------------------------
-    # TEXT INPUT
+    # SESSION STATE FOR RESULTS
+    # ---------------------------------------------------------
+
+    if "review_predictions" not in st.session_state:
+        st.session_state.review_predictions = None
+
+    if "analysed_review" not in st.session_state:
+        st.session_state.analysed_review = None
+
+
+    # ---------------------------------------------------------
+    # REVIEW INPUT
+    #
+    # Always remains visible even after prediction.
     # ---------------------------------------------------------
 
     review_input = st.text_area(
         "Enter a Steam review",
         key="review_classifier_input",
         placeholder=(
-            "Example: The combat is really fun, "
-            "but the game keeps crashing and "
-            "the frame rate drops during fights."
+            "Example: The combat is really fun, but the game "
+            "keeps crashing and the frame rate drops during fights."
         ),
         height=140
     )
 
 
     # ---------------------------------------------------------
-    # ANALYSE BUTTON
+    # BUTTON
     # ---------------------------------------------------------
 
     if st.button(
         "Analyse Review",
-        type="primary"
+        type="primary",
+        use_container_width=False
     ):
 
         review_text = review_input.strip()
 
 
         # -----------------------------------------------------
-        # VALIDATE INPUT
+        # VALIDATE
         # -----------------------------------------------------
 
         if not review_text:
@@ -1708,126 +1718,141 @@ def review_classifier_section():
                 "Please enter a review before analysing it."
             )
 
-            return
+        else:
 
+            try:
 
-        try:
+                with st.spinner(
+                    "Analysing review with ModernBERT..."
+                ):
 
-            # -------------------------------------------------
-            # PREDICT
-            # -------------------------------------------------
-
-            with st.spinner(
-                "Analysing review with ModernBERT..."
-            ):
-
-                predictions = predict_review(
-                    review_text,
-                    MODEL_URI
-                )
-
-
-            # -------------------------------------------------
-            # DETECT THEMES ABOVE FINAL THRESHOLD
-            # -------------------------------------------------
-
-            detected_themes = [
-
-                prediction
-
-                for prediction in predictions
-
-                if (
-                    prediction["score"]
-                    >= PREDICTION_THRESHOLD
-                )
-            ]
-
-
-            # -------------------------------------------------
-            # RESULTS
-            # -------------------------------------------------
-
-            st.subheader(
-                "Detected Feedback Themes"
-            )
-
-
-            if detected_themes:
-
-                for prediction in detected_themes:
-
-                    st.markdown(
-                        f"### {prediction['theme']}"
-                    )
-
-                    st.progress(
-                        min(
-                            prediction["score"],
-                            1.0
-                        )
-                    )
-
-                    st.caption(
-                        "Model score: "
-                        f"{prediction['score'] * 100:.1f}%"
+                    predictions = predict_review(
+                        review_text,
+                        MODEL_URI
                     )
 
 
-            else:
-
-                st.info(
-                    "No specific feedback theme exceeded "
-                    f"the {PREDICTION_THRESHOLD:.0%} "
-                    "prediction threshold."
-                )
-
-
-            # -------------------------------------------------
-            # ALL THEME SCORES
-            # -------------------------------------------------
-
-            with st.expander(
-                "View all theme scores"
-            ):
-
-                score_df = pd.DataFrame(
+                # Save latest prediction
+                st.session_state.review_predictions = (
                     predictions
                 )
 
-                score_df["score"] = (
-                    score_df["score"]
-                    * 100
-                )
-
-                score_df = score_df.rename(
-                    columns={
-                        "theme":
-                            "Feedback Theme",
-
-                        "score":
-                            "Model Score (%)"
-                    }
-                )
-
-                st.dataframe(
-                    score_df,
-                    hide_index=True,
-                    use_container_width=True
+                st.session_state.analysed_review = (
+                    review_text
                 )
 
 
-        except Exception as e:
+            except Exception as e:
 
-            st.error(
-                "The feedback classifier could not "
-                "be loaded or executed."
+                st.error(
+                    "The feedback classifier could not "
+                    "be loaded or executed."
+                )
+
+                st.exception(e)
+
+
+    # =========================================================
+    # DISPLAY LATEST RESULT
+    #
+    # This is separate from the button so the result remains
+    # available while the user enters another review.
+    # =========================================================
+
+    predictions = (
+        st.session_state.review_predictions
+    )
+
+
+    if predictions is not None:
+
+        detected_themes = [
+
+            prediction
+
+            for prediction in predictions
+
+            if (
+                prediction["score"]
+                >= PREDICTION_THRESHOLD
+            )
+        ]
+
+
+        st.subheader(
+            "Detected Feedback Themes"
+        )
+
+
+        # -----------------------------------------------------
+        # DETECTED THEMES
+        # -----------------------------------------------------
+
+        if detected_themes:
+
+            for prediction in detected_themes:
+
+                st.markdown(
+                    f"**{prediction['theme']}**"
+                )
+
+                st.progress(
+                    min(
+                        prediction["score"],
+                        1.0
+                    )
+                )
+
+                st.caption(
+                    f"Model score: "
+                    f"{prediction['score'] * 100:.1f}%"
+                )
+
+
+        else:
+
+            st.info(
+                "No specific feedback theme exceeded "
+                f"the {PREDICTION_THRESHOLD:.0%} "
+                "prediction threshold."
             )
 
-            st.exception(e)
+
+        # -----------------------------------------------------
+        # ALL SCORES
+        # -----------------------------------------------------
+
+        with st.expander(
+            "View all theme scores"
+        ):
+
+            score_df = pd.DataFrame(
+                predictions
+            )
+
+            score_df["score"] = (
+                score_df["score"]
+                * 100
+            )
+
+            score_df = score_df.rename(
+                columns={
+                    "theme":
+                        "Feedback Theme",
+
+                    "score":
+                        "Model Score (%)"
+                }
+            )
+
+            st.dataframe(
+                score_df,
+                hide_index=True,
+                use_container_width=True
+            )
 
 
-# RUN CLASSIFIER SECTION
+# RUN CLASSIFIER
 review_classifier_section()
 
 
