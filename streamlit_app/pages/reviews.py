@@ -800,3 +800,339 @@ else:
 
 
 st.divider()
+
+# =========================================================
+# CHART 2
+# INDIE VS NON-INDIE REVIEW CONSTRUCTIVENESS
+# NUMBER OF FEEDBACK THEMES MENTIONED
+# =========================================================
+
+st.header("Do Indie Reviews Contain More Constructive Feedback?")
+
+st.write(
+    """
+    As a supporting comparison, Indie and Non-Indie reviews are
+    compared using the number of specific feedback themes identified
+    in each review.
+
+    Theme count is used as a proxy for constructiveness: reviews that
+    discuss multiple aspects of a game may provide broader and more
+    useful feedback than reviews containing little or no specific
+    feedback.
+    """
+)
+
+
+# ---------------------------------------------------------
+# CHECK REQUIRED COLUMNS
+# ---------------------------------------------------------
+
+if (
+    "game_type" in df.columns
+    and "theme_count" in df.columns
+):
+
+    constructiveness_df = df[
+        df["game_type"].isin(
+            ["Indie", "Non-Indie"]
+        )
+        & df["theme_count"].notna()
+    ].copy()
+
+
+    # ---------------------------------------------------------
+    # MAKE SURE THEME COUNT IS NUMERIC
+    # ---------------------------------------------------------
+
+    constructiveness_df["theme_count"] = (
+        pd.to_numeric(
+            constructiveness_df["theme_count"],
+            errors="coerce"
+        )
+    )
+
+
+    constructiveness_df = (
+        constructiveness_df[
+            constructiveness_df["theme_count"].notna()
+        ]
+        .copy()
+    )
+
+
+    constructiveness_df["theme_count"] = (
+        constructiveness_df[
+            "theme_count"
+        ].astype(int)
+    )
+
+
+    # ---------------------------------------------------------
+    # CREATE DISPLAY BUCKETS
+    #
+    # Keep 0, 1, 2 individually.
+    # Combine 3+ because very high theme counts may be rare.
+    # ---------------------------------------------------------
+
+    constructiveness_df[
+        "theme_count_group"
+    ] = constructiveness_df[
+        "theme_count"
+    ].apply(
+        lambda x: (
+            "0"
+            if x == 0
+            else "1"
+            if x == 1
+            else "2"
+            if x == 2
+            else "3+"
+        )
+    )
+
+
+    # ---------------------------------------------------------
+    # COUNT REVIEWS
+    # ---------------------------------------------------------
+
+    theme_count_distribution = (
+        constructiveness_df
+        .groupby(
+            [
+                "game_type",
+                "theme_count_group"
+            ]
+        )
+        .size()
+        .reset_index(
+            name="review_count"
+        )
+    )
+
+
+    # ---------------------------------------------------------
+    # TOTAL REVIEWS FOR EACH GAME TYPE
+    # ---------------------------------------------------------
+
+    theme_count_distribution[
+        "game_type_total"
+    ] = (
+        theme_count_distribution
+        .groupby("game_type")[
+            "review_count"
+        ]
+        .transform("sum")
+    )
+
+
+    # ---------------------------------------------------------
+    # CONVERT TO %
+    #
+    # Each game type adds up to 100%.
+    # This avoids Indie having an advantage just because
+    # there may be more Indie reviews in the dataset.
+    # ---------------------------------------------------------
+
+    theme_count_distribution[
+        "percentage"
+    ] = (
+        theme_count_distribution[
+            "review_count"
+        ]
+        / theme_count_distribution[
+            "game_type_total"
+        ]
+        * 100
+    )
+
+
+    # ---------------------------------------------------------
+    # SUMMARY STATISTICS
+    # ---------------------------------------------------------
+
+    indie_counts = constructiveness_df[
+        constructiveness_df["game_type"]
+        == "Indie"
+    ]["theme_count"]
+
+
+    non_indie_counts = constructiveness_df[
+        constructiveness_df["game_type"]
+        == "Non-Indie"
+    ]["theme_count"]
+
+
+    indie_mean = indie_counts.mean()
+    non_indie_mean = non_indie_counts.mean()
+
+    indie_median = indie_counts.median()
+    non_indie_median = non_indie_counts.median()
+
+
+    # % REVIEWS WITH 2 OR MORE THEMES
+
+    indie_multi = (
+        (indie_counts >= 2).mean()
+        * 100
+    )
+
+    non_indie_multi = (
+        (non_indie_counts >= 2).mean()
+        * 100
+    )
+
+
+    # ---------------------------------------------------------
+    # SUMMARY CARDS
+    # ---------------------------------------------------------
+
+    col1, col2, col3, col4 = st.columns(4)
+
+
+    col1.metric(
+        "Indie Avg. Themes",
+        f"{indie_mean:.2f}"
+    )
+
+
+    col2.metric(
+        "Non-Indie Avg. Themes",
+        f"{non_indie_mean:.2f}"
+    )
+
+
+    col3.metric(
+        "Indie Reviews with 2+ Themes",
+        f"{indie_multi:.1f}%"
+    )
+
+
+    col4.metric(
+        "Non-Indie Reviews with 2+ Themes",
+        f"{non_indie_multi:.1f}%"
+    )
+
+
+    # ---------------------------------------------------------
+    # CAPTION
+    # ---------------------------------------------------------
+
+    st.caption(
+        "Percentages are calculated separately within Indie and "
+        "Non-Indie reviews so that differences in dataset size do "
+        "not affect the comparison."
+    )
+
+
+    # ---------------------------------------------------------
+    # GROUPED BAR CHART
+    # ---------------------------------------------------------
+
+    fig_constructiveness = px.bar(
+        theme_count_distribution,
+
+        x="theme_count_group",
+        y="percentage",
+
+        color="game_type",
+
+        barmode="group",
+
+        text="percentage",
+
+        category_orders={
+            "theme_count_group": [
+                "0",
+                "1",
+                "2",
+                "3+"
+            ],
+
+            "game_type": [
+                "Indie",
+                "Non-Indie"
+            ]
+        },
+
+        title=(
+            "Distribution of Feedback Themes Mentioned "
+            "in Indie vs Non-Indie Reviews"
+        ),
+
+        labels={
+            "theme_count_group":
+                "Number of Feedback Themes Mentioned",
+
+            "percentage":
+                "% of Reviews",
+
+            "game_type":
+                "Game Type"
+        },
+
+        custom_data=[
+            "review_count"
+        ]
+    )
+
+
+    # ---------------------------------------------------------
+    # LABELS + HOVER
+    # ---------------------------------------------------------
+
+    fig_constructiveness.update_traces(
+
+        texttemplate="%{text:.1f}%",
+
+        textposition="outside",
+
+        hovertemplate=(
+            "<b>%{fullData.name}</b><br>"
+            "Themes mentioned: %{x}<br>"
+            "Reviews: %{customdata[0]:,}<br>"
+            "Share of reviews: %{y:.1f}%"
+            "<extra></extra>"
+        )
+    )
+
+
+    # ---------------------------------------------------------
+    # LAYOUT
+    # ---------------------------------------------------------
+
+    fig_constructiveness.update_layout(
+
+        height=520,
+
+        xaxis_title=(
+            "Number of Feedback Themes Mentioned"
+        ),
+
+        yaxis_title=(
+            "% of Reviews"
+        ),
+
+        yaxis=dict(
+            ticksuffix="%"
+        ),
+
+        legend_title_text=(
+            "Game Type"
+        )
+    )
+
+
+    st.plotly_chart(
+        fig_constructiveness,
+        width="stretch"
+    )
+
+
+else:
+
+    st.warning(
+        "The game_type or theme_count column is not available."
+    )
+
+
+st.divider()
