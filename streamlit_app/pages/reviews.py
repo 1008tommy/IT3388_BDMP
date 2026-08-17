@@ -8,9 +8,7 @@ from databricks import sql
 from databricks.sdk.core import Config
 
 
-# =========================================================
 # CONFIGURATION
-# =========================================================
 
 TABLE_NAME = os.getenv(
     "REVIEW_TABLE",
@@ -22,9 +20,7 @@ WAREHOUSE_ID = os.getenv(
 )
 
 
-# =========================================================
 # DATABRICKS CONNECTION
-# =========================================================
 
 cfg = Config()
 
@@ -69,9 +65,7 @@ def get_connection():
     )
 
 
-# =========================================================
 # LOAD ONLY COLUMNS NEEDED FOR DASHBOARD
-# =========================================================
 
 @st.cache_data(ttl=1800)
 def load_review_data():
@@ -100,7 +94,7 @@ def load_review_data():
             "app_id",
             "name",
             "game_type",
-            "primary_genre",   # ADD THIS
+            "primary_genre",  
             "genres",
             "price",
             "peak_ccu",
@@ -145,17 +139,13 @@ def load_review_data():
         conn.close()
 
 
-# =========================================================
 # LOAD DATA
-# =========================================================
 
 with st.spinner("Loading review analytics data..."):
     df = load_review_data()
 
 
-# =========================================================
 # BASIC CLEANING
-# =========================================================
 
 required_columns = [
     "main_theme",
@@ -195,13 +185,11 @@ for column in [
         )
 
 
-# =========================================================
 # GENRE PARSING
 # Works whether genres came across as:
 # ["Action", "Indie"]
 # Action, Indie
 # or an actual Python list
-# =========================================================
 
 def parse_genres(value):
 
@@ -255,9 +243,7 @@ if "genres" in df.columns:
     )
 
 
-# =========================================================
 # PAGE HEADER
-# =========================================================
 
 st.title("Player Review Analysis")
 
@@ -271,9 +257,7 @@ st.write(
 )
 
 
-# =========================================================
 # OVERVIEW METRICS
-# =========================================================
 
 st.header("Review Overview")
 
@@ -327,9 +311,7 @@ negative_percentage = (
 )
 
 
-# =========================================================
 # DISPLAY OVERVIEW CARDS
-# =========================================================
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -361,10 +343,8 @@ col4.metric(
 st.divider()
 
 
-# =========================================================
 # CHART 1
 # KEY FEEDBACK THEMES BY INDIE PRIMARY GENRE
-# =========================================================
 
 st.header("1. What Feedback Themes Should Indie Developers Look Out For?")
 
@@ -381,9 +361,7 @@ st.write(
 )
 
 
-# ---------------------------------------------------------
 # GENRES USED IN THE MODELLING / SAMPLING PLAN
-# ---------------------------------------------------------
 
 MODEL_GENRES = [
     "Action",
@@ -395,9 +373,7 @@ MODEL_GENRES = [
 ]
 
 
-# ---------------------------------------------------------
 # PREPARE INDIE REVIEW DATA
-# ---------------------------------------------------------
 
 if (
     "primary_genre" in df.columns
@@ -411,9 +387,7 @@ if (
     ].copy()
 
 
-    # ---------------------------------------------------------
     # REMOVE GENERAL FEEDBACK
-    # ---------------------------------------------------------
 
     general_themes = [
         "General positive feedback",
@@ -428,9 +402,7 @@ if (
     ]
 
 
-    # ---------------------------------------------------------
     # GENRE SELECTOR
-    # ---------------------------------------------------------
 
     available_genres = [
         genre
@@ -442,14 +414,12 @@ if (
 
 
     selected_genre = st.selectbox(
-        "🎮 Select an indie genre",
+        "Select an indie genre",
         available_genres
     )
 
 
-    # ---------------------------------------------------------
     # FILTER TO SELECTED PRIMARY GENRE
-    # ---------------------------------------------------------
 
     selected_genre_df = indie_genre_df[
         indie_genre_df["primary_genre"]
@@ -457,9 +427,7 @@ if (
     ].copy()
 
 
-    # ---------------------------------------------------------
     # COUNT SPECIFIC FEEDBACK THEMES
-    # ---------------------------------------------------------
 
     theme_counts = (
         selected_genre_df
@@ -471,11 +439,9 @@ if (
     )
 
 
-    # ---------------------------------------------------------
     # RECALCULATE PERCENTAGES
     # GENERAL FEEDBACK HAS ALREADY BEEN REMOVED,
     # SO THESE THEMES ADD UP TO 100%
-    # ---------------------------------------------------------
 
     specific_feedback_total = (
         theme_counts["review_count"].sum()
@@ -505,9 +471,7 @@ if (
     )
 
 
-    # ---------------------------------------------------------
     # SHOW NUMBER OF SPECIFIC REVIEWS USED
-    # ---------------------------------------------------------
 
     st.caption(
         f"Based on {specific_feedback_total:,} reviews containing "
@@ -516,9 +480,7 @@ if (
     )
 
 
-    # ---------------------------------------------------------
     # CHART
-    # ---------------------------------------------------------
 
     fig_theme = px.bar(
         theme_counts,
@@ -579,79 +541,6 @@ if (
         fig_theme,
         width="stretch"
     )
-
-
-    # ---------------------------------------------------------
-    # DEVELOPER INSIGHT
-    # ---------------------------------------------------------
-
-    if not theme_counts.empty:
-
-        ranked_themes = (
-            theme_counts
-            .sort_values(
-                "percentage",
-                ascending=False
-            )
-            .reset_index(drop=True)
-        )
-
-
-        top_theme = (
-            ranked_themes
-            .iloc[0]["main_theme"]
-        )
-
-        top_percentage = (
-            ranked_themes
-            .iloc[0]["percentage"]
-        )
-
-
-        # Second most common theme
-        if len(ranked_themes) > 1:
-
-            second_theme = (
-                ranked_themes
-                .iloc[1]["main_theme"]
-            )
-
-            second_percentage = (
-                ranked_themes
-                .iloc[1]["percentage"]
-            )
-
-
-            st.info(
-                f"""
-                **Developer Insight:** Among specific feedback for
-                **Indie {selected_genre} games**, the most frequently
-                discussed area is **{top_theme}**
-                (**{top_percentage:.1f}%**), followed by
-                **{second_theme}**
-                (**{second_percentage:.1f}%**).
-
-                Since general praise and complaints are excluded,
-                the percentages shown represent the distribution of
-                actionable feedback themes and add up to **100%**.
-
-                Indie developers creating a {selected_genre} game
-                may want to pay particular attention to these areas
-                when studying similar games and planning improvements.
-                """
-            )
-
-        else:
-
-            st.info(
-                f"""
-                **Developer Insight:** The most frequently discussed
-                specific feedback area for **Indie {selected_genre}
-                games** is **{top_theme}**, representing approximately
-                **{top_percentage:.1f}%** of specific feedback.
-                """
-            )
-
 
 else:
 
