@@ -1,1 +1,14 @@
 command: ["streamlit", "run", "app.py"]
+
+env:
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+
+  - name: REVIEW_TABLE
+    valueFrom: table-2
+
+  - name: METADATA_TABLE
+    valueFrom: table
+
+  - name: STREAMLIT_GATHER_USAGE_STATS
+    value: "false"
