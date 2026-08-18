@@ -186,7 +186,7 @@ fig, ax = plt.subplots(figsize=(10, 5))
 prices = price_df["launch_price"]
 upper_limit = prices.quantile(0.99)
 
-ax.hist(prices, bins=100, range=(0, upper_limit), alpha=0.75)
+ax.hist(prices, bins=50, range=(0, upper_limit), alpha=0.75)
 ax.set_xlim(0, upper_limit)
 ax.set_xlabel("Launch Price ($)")
 ax.set_ylabel("Number of Games")
