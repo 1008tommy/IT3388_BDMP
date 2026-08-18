@@ -158,6 +158,7 @@ def load_data():
 
 
 price_df, X_test, y_test, feature_names, genre_dummy_cols = load_data()
+price_cap = price_df["launch_price"].quantile(0.99)
 
 # -- Overview ------------------------------------------------------------------
 st.header("Overview of Indie Games")
@@ -183,11 +184,11 @@ st.header("Launch Price Distribution")
 fig, ax = plt.subplots(figsize=(10, 5))
 
 prices = price_df["launch_price"]
+upper_limit = prices.quantile(0.99)
 
-ax.hist(prices, bins=1000, alpha=0.75)
-
-# ax.set_xscale("log")
-ax.set_xlabel("Launch Price ($) — log scale")
+ax.hist(prices, bins=1000, range=(0, upper_limit), alpha=0.75)
+ax.set_xlim(0, upper_limit)
+ax.set_xlabel("Launch Price ($)")
 ax.set_ylabel("Number of Games")
 ax.set_title("Distribution of Indie Game Launch Prices")
 
@@ -219,7 +220,7 @@ genre_df = pd.DataFrame(genre_rows).sort_values("Median Price", ascending=True)
 fig, ax = plt.subplots(figsize=(10, max(5, len(genre_df) * 0.35)))
 
 ax.barh(genre_df["Genre"], genre_df["Median Price"])
-
+ax.set_xlim(0, price_cap)
 ax.set_xlabel("Median Launch Price ($)")
 ax.set_ylabel("Genre")
 ax.set_title("Median Launch Price by Genre")
@@ -249,6 +250,7 @@ for col, (feature, label) in zip(scope_cols, scope_features):
         fig, ax = plt.subplots(figsize=(5, 4))
 
         ax.scatter(price_df[feature], price_df["launch_price"], alpha=0.25, s=12)
+        ax.set_ylim(0, price_cap)
 
         ax.set_xlabel(label)
         ax.set_ylabel("Launch Price ($)")
@@ -269,9 +271,8 @@ discount_cols[3].metric("Median discount events", f"{price_df['n_discount_events
 fig, ax = plt.subplots(figsize=(9, 5))
 
 ax.scatter(price_df["launch_price"], price_df["avg_discount_pct"], alpha=0.25, s=12)
-
-ax.set_xscale("log")
-ax.set_xlabel("Launch Price ($) — log scale")
+ax.set_xlim(0, price_cap)
+ax.set_xlabel("Launch Price ($)")
 ax.set_ylabel("Average Discount (%)")
 ax.set_title("Launch Price vs Average Discount")
 
@@ -281,10 +282,9 @@ plt.close(fig)
 fig, ax = plt.subplots(figsize=(9, 5))
 
 ax.scatter(price_df["n_discount_events"], price_df["launch_price"], alpha=0.25, s=12)
-
-ax.set_yscale("log")
+ax.set_ylim(0, price_cap)
 ax.set_xlabel("Number of Discount Events")
-ax.set_ylabel("Launch Price ($) — log scale")
+ax.set_ylabel("Launch Price ($)")
 ax.set_title("Discount Frequency vs Launch Price")
 
 st.pyplot(fig, use_container_width=True)
