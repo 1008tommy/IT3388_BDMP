@@ -186,7 +186,7 @@ prices = price_df["launch_price"]
 
 ax.hist(prices, bins=1000, alpha=0.75)
 
-ax.set_xscale("log")
+# ax.set_xscale("log")
 ax.set_xlabel("Launch Price ($) — log scale")
 ax.set_ylabel("Number of Games")
 ax.set_title("Distribution of Indie Game Launch Prices")
@@ -282,7 +282,7 @@ fig, ax = plt.subplots(figsize=(9, 5))
 
 ax.scatter(price_df["n_discount_events"], price_df["launch_price"], alpha=0.25, s=12)
 
-# ax.set_yscale("log")
+ax.set_yscale("log")
 ax.set_xlabel("Number of Discount Events")
 ax.set_ylabel("Launch Price ($) — log scale")
 ax.set_title("Discount Frequency vs Launch Price")
