@@ -184,7 +184,7 @@ fig, ax = plt.subplots(figsize=(10, 5))
 
 prices = price_df["launch_price"]
 
-ax.hist(prices, bins=100, alpha=0.75)
+ax.hist(prices, bins=1000, alpha=0.75)
 
 ax.set_xscale("log")
 ax.set_xlabel("Launch Price ($) — log scale")
