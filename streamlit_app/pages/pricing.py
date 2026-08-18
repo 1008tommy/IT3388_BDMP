@@ -291,7 +291,23 @@ st.pyplot(fig, use_container_width=True)
 plt.close(fig)
 
 # -- Conclusion ------------------------------------------------------------------
-st.header("Conclusion")
+st.markdown("""
+## Conclusion
+
+The data shows a weak relationship between game scope and launch price, weaker than the original hypothesis proposed, and driven more by popularity and genre-type signals than by the specific content-scope features named.
+
+**Model performance.** The best model (LightGBM, R²=0.237) outperforms linear regression (R²=0.141) and a mean-only baseline (R²≈0), showing the relationship has some non-linear structure. However, even the best model explains under a quarter of price variance, and performance is unstable across folds (R² ranging 0.10–0.38) — most of what determines an indie game's price isn't captured by scope or metadata at all.
+
+**What actually predicts price doesn't match the hypothesis.** The top predictors are `total_tag_votes`, `days_since_release`, and `peak_ccu` are popularity and engagement signals, not content scope. The features the hypothesis specifically named (**DLC count and platform/language support**) show no visible relationship with price in the data. Achievement count is predictive, but in the opposite direction expected: very high achievement counts cluster at *low* prices, consistent with low-effort "achievement farming" titles rather than content-rich games.
+
+**Genre reflects product type more than content depth.** The highest median prices belong to productivity/creative tools (Web Publishing, Video Production, Game Development, Design & Illustration, ~$15–20) rather than games. Actual game genres cluster around $8–10, with Casual/Indie/Free-to-Play lowest (~$5–6). This suggests genre is partly separating "software tool" from "game" rather than measuring scope within games.
+
+**Price follows convention, not a continuous function of scope.** Launch prices spike sharply at Steam's standard price points ($4.99, $9.99, $14.99, $19.99, $24.99), suggesting developers select from a small set of conventional tiers rather than pricing continuously based on features — which limits how well any regression can fit the underlying decision.
+
+**Discounting is a launch-week convention, not a sustained strategy.** While 66.8% of games launch with a discount, the median game spends only 0.1% of its lifetime on sale — the discount pattern is dominated by one-time launch promotions rather than repeated, ongoing discounting. Discount frequency and depth show no clear relationship with price tier.
+
+**Overall:** the hypothesis is partially supported — pricing is patterned and non-random — but the mechanism differs from what was proposed. Popularity and product-type signals explain more of the variation than the specific scope features (achievements, DLC, platform/language support) originally hypothesized to drive price.
+""")
 
 
 # # -- Models --------------------------------------------------------------------
