@@ -282,7 +282,7 @@ fig, ax = plt.subplots(figsize=(9, 5))
 
 ax.scatter(price_df["n_discount_events"], price_df["launch_price"], alpha=0.25, s=12)
 
-ax.set_yscale("log")
+# ax.set_yscale("log")
 ax.set_xlabel("Number of Discount Events")
 ax.set_ylabel("Launch Price ($) — log scale")
 ax.set_title("Discount Frequency vs Launch Price")
