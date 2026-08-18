@@ -160,7 +160,7 @@ def load_data():
 price_df, X_test, y_test, feature_names, genre_dummy_cols = load_data()
 
 # -- Overview ------------------------------------------------------------------
-st.header("📊 Overview of Indie Games")
+st.header("Overview of Indie Games")
 
 total_games = price_df["steam_id"].nunique()
 median_price = price_df["launch_price"].median()
@@ -178,13 +178,13 @@ overview_cols[4].metric("Games with DLC", f"{dlc_pct:.1f}%")
 overview_cols[5].metric("Median achievements", f"{median_achievements:.0f}")
 
 # -- Price Distribution --------------------------------------------------------
-st.header("💰 Launch Price Distribution")
+st.header("Launch Price Distribution")
 
 fig, ax = plt.subplots(figsize=(10, 5))
 
 prices = price_df["launch_price"]
 
-ax.hist(prices, bins=50, alpha=0.75)
+ax.hist(prices, bins=100, alpha=0.75)
 
 ax.set_xscale("log")
 ax.set_xlabel("Launch Price ($) — log scale")
@@ -195,7 +195,7 @@ st.pyplot(fig, use_container_width=True)
 plt.close(fig)
 
 # -- Genre Pricing -------------------------------------------------------------
-st.header("🎮 Genre and Launch Price")
+st.header("Genre and Launch Price")
 
 genre_rows = []
 
@@ -234,7 +234,7 @@ st.dataframe(
 )
 
 # -- Game Scope vs Price -------------------------------------------------------
-st.header("🎯 Game Scope and Launch Price")
+st.header("Game Scope and Launch Price")
 
 scope_cols = st.columns(3)
 
@@ -258,7 +258,7 @@ for col, (feature, label) in zip(scope_cols, scope_features):
         plt.close(fig)
 
 # -- Discount Strategy ---------------------------------------------------------
-st.header("🏷️ Discount Strategy")
+st.header("Discount Strategy")
 
 discount_cols = st.columns(4)
 discount_cols[0].metric("Games launched with discount", f"{discount_pct:.1f}%")
@@ -289,6 +289,9 @@ ax.set_title("Discount Frequency vs Launch Price")
 
 st.pyplot(fig, use_container_width=True)
 plt.close(fig)
+
+# -- Conclusion ------------------------------------------------------------------
+st.header("Conclusion")
 
 
 # # -- Models --------------------------------------------------------------------
