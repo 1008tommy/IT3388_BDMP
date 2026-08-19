@@ -127,6 +127,19 @@ TAGS = ['1980s', '1990s', '2.5D', '2D', '2D_Fighter', '3D', '3D_Platformer', '4X
 # HELPER FUNCTIONS
 # =========================================================
 
+def format_number(num):
+    """Format number with 3 significant figures"""
+    if num == 0:
+        return "0"
+    elif abs(num) >= 1000:
+        return f"{num:,.0f}"
+    elif abs(num) >= 100:
+        return f"{num:.1f}"
+    elif abs(num) >= 10:
+        return f"{num:.2f}"
+    else:
+        return f"{num:.3f}"
+
 def get_feature_importance_dataframe(feature_importances, feature_names):
     """Convert feature importance to DataFrame"""
     if feature_importances is None:
@@ -183,7 +196,6 @@ def get_feature_type(feature_name):
 
 def format_feature_name(feature_name):
     """Format feature name for display"""
-    # Remove prefix
     if feature_name.startswith('tags_'):
         return feature_name.replace('tags_', '').replace('_', ' ')
     elif feature_name.startswith('categories_'):
@@ -198,10 +210,7 @@ def format_feature_name(feature_name):
         return feature_name.replace('_', ' ').title()
 
 def get_top_features_to_add(model, input_data, expected_features, feature_list, current_values, pred_log, model_type='ccu'):
-    """
-    Get the top features to add based on model impact analysis.
-    Tests adding each missing feature one at a time.
-    """
+    """Get the top features to add based on model impact analysis"""
     feature_impacts = {}
     base_pred = np.expm1(pred_log) if pred_log else pred_log
     
@@ -216,18 +225,14 @@ def get_top_features_to_add(model, input_data, expected_features, feature_list, 
         # Create a copy of the input data
         test_data = input_data.copy()
         
-        # Add the feature with value 1 (or appropriate value)
+        # Add the feature with appropriate value
         if feature.startswith('supported_languages_') or feature.startswith('full_audio_languages_'):
-            # For language features, add with value 1
             test_data[feature] = 1
         elif feature.startswith('tags_'):
-            # For tags, add with 1000 votes
             test_data[feature] = 1000
         elif feature.startswith('categories_') or feature.startswith('genres_'):
-            # For categories and genres, add with value 1
             test_data[feature] = 1
         else:
-            # For other features, add with value 1
             test_data[feature] = 1
         
         # Create DataFrame with correct feature order
@@ -254,48 +259,7 @@ def get_top_features_to_add(model, input_data, expected_features, feature_list, 
     
     # Sort by absolute change
     sorted_features = sorted(feature_impacts.items(), key=lambda x: x[1]['abs_change'], reverse=True)
-    return sorted_features[:10]  # Return top 10
-
-def generate_feature_recommendations(feature_impacts, current_ccu, current_playtime):
-    """Generate formatted recommendations from feature impacts"""
-    recommendations = []
-    
-    for feature, impact in feature_impacts:
-        if impact['abs_change'] > 0:  # Only recommend if it improves
-            feature_type = impact['feature_type']
-            display_name = impact['display_name']
-            
-            if feature_type == 'Supported Language':
-                rec = {
-                    'type': feature_type,
-                    'feature': display_name,
-                    'impact': impact['abs_change'],
-                    'pct_change': impact['pct_change'],
-                    'suggestion': f"Add {feature_type} support for '{display_name}'"
-                }
-            elif feature_type == 'Audio Language':
-                rec = {
-                    'type': feature_type,
-                    'feature': display_name,
-                    'impact': impact['abs_change'],
-                    'pct_change': impact['pct_change'],
-                    'suggestion': f"Add {feature_type} support for '{display_name}'"
-                }
-            else:
-                rec = {
-                    'type': feature_type,
-                    'feature': display_name,
-                    'impact': impact['abs_change'],
-                    'pct_change': impact['pct_change'],
-                    'suggestion': f"Add {feature_type} '{display_name}'"
-                }
-            
-            # Determine which metric it improves
-            if impact['abs_change'] > 0:
-                rec['improves'] = 'Both'  # We'll refine this later
-                recommendations.append(rec)
-    
-    return recommendations
+    return sorted_features[:10]
 
 # =========================================================
 # UI
@@ -520,9 +484,9 @@ if model_ccu and model_playtime:
             
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Predicted Peak CCU", f"{int(pred_ccu):,}", help="Maximum concurrent users at peak")
+                st.metric("Predicted Peak CCU", f"{format_number(pred_ccu)}", help="Maximum concurrent users at peak")
             with col2:
-                st.metric("Predicted Avg Playtime", f"{int(pred_playtime):,} mins", help="Average minutes played per user")
+                st.metric("Predicted Avg Playtime", f"{format_number(pred_playtime)} mins", help="Average minutes played per user")
             
             # =========================================================
             # CALCULATE TOP FEATURES TO ADD
@@ -549,7 +513,6 @@ if model_ccu and model_playtime:
                 
                 # Limit the number of features to test for performance
                 if len(all_missing_features) > 50:
-                    # Get top features from importance
                     if feat_imp_ccu is not None:
                         importance_df = pd.DataFrame({
                             'feature': expected_features,
@@ -662,7 +625,7 @@ if model_ccu and model_playtime:
                             if rec['ccu_impact'] > 0:
                                 st.metric(
                                     "CCU Impact", 
-                                    f"+{int(rec['ccu_impact']):,}", 
+                                    f"+{format_number(rec['ccu_impact'])}", 
                                     delta=f"{rec['ccu_pct']:.1f}%",
                                     delta_color="normal"
                                 )
@@ -672,7 +635,7 @@ if model_ccu and model_playtime:
                             if rec['playtime_impact'] > 0:
                                 st.metric(
                                     "Playtime Impact", 
-                                    f"+{int(rec['playtime_impact']):,} min", 
+                                    f"+{format_number(rec['playtime_impact'])} min", 
                                     delta=f"{rec['playtime_pct']:.1f}%",
                                     delta_color="normal"
                                 )
@@ -682,58 +645,6 @@ if model_ccu and model_playtime:
                         st.divider()
             else:
                 st.success("Your game configuration looks well-optimized! No major improvements needed.")
-            
-            # =========================================================
-            # GENERAL RECOMMENDATIONS
-            # =========================================================
-            st.subheader("Additional Recommendations")
-            
-            general_recs = []
-            
-            # Price recommendations
-            if price == 0:
-                general_recs.append("Consider adding a price > $0 - free games often have lower perceived value")
-            elif price > 50:
-                general_recs.append("High price may limit initial user base - consider a lower price point for better adoption")
-            
-            # Platform recommendations
-            platform_count = int(windows) + int(mac) + int(linux)
-            if platform_count < 3:
-                general_recs.append(f"Add support for {3-platform_count} additional platform(s) to reach wider audience (Mac/Linux)")
-            
-            # Category recommendations
-            if category_count < 3:
-                general_recs.append("Add more categories to improve discoverability")
-            
-            # Multiplayer recommendations
-            if input_data.get('categories_Multi_player', 0) == 0 and input_data.get('categories_Co_op', 0) == 0:
-                general_recs.append("Consider adding multiplayer or co-op features to boost peak concurrent users")
-            
-            # Achievement recommendations
-            if achievements < 20:
-                general_recs.append("Add more achievements (20+) to increase player engagement and playtime")
-            
-            # Language recommendations
-            if supported_languages_count < 5:
-                general_recs.append("Add more supported languages to reach international audience (5+ languages recommended)")
-            
-            # DLC recommendations
-            if dlc_count == 0:
-                general_recs.append("Consider adding DLCs to extend game lifecycle and revenue")
-            
-            # VR support
-            if input_data.get('categories_VR_Support', 0) == 0:
-                general_recs.append("Consider adding VR support to tap into growing VR market")
-            
-            # Workshop support
-            if input_data.get('categories_Steam_Workshop', 0) == 0:
-                general_recs.append("Add Steam Workshop support to encourage community content and longer playtime")
-            
-            if general_recs:
-                for rec in general_recs:
-                    st.info(rec)
-            else:
-                st.success("No additional recommendations - your game configuration looks great!")
             
             # =========================================================
             # FEATURE IMPORTANCE VISUALIZATION

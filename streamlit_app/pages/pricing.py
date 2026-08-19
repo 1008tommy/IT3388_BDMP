@@ -158,9 +158,10 @@ def load_data():
 
 
 price_df, X_test, y_test, feature_names, genre_dummy_cols = load_data()
+price_cap = price_df["launch_price"].quantile(0.99)
 
 # -- Overview ------------------------------------------------------------------
-st.header("📊 Overview of Indie Games")
+st.header("Overview of Indie Games")
 
 total_games = price_df["steam_id"].nunique()
 median_price = price_df["launch_price"].median()
@@ -178,16 +179,16 @@ overview_cols[4].metric("Games with DLC", f"{dlc_pct:.1f}%")
 overview_cols[5].metric("Median achievements", f"{median_achievements:.0f}")
 
 # -- Price Distribution --------------------------------------------------------
-st.header("💰 Launch Price Distribution")
+st.header("Launch Price Distribution")
 
 fig, ax = plt.subplots(figsize=(10, 5))
 
 prices = price_df["launch_price"]
+upper_limit = prices.quantile(0.99)
 
-ax.hist(prices, bins=50, alpha=0.75)
-
-ax.set_xscale("log")
-ax.set_xlabel("Launch Price ($) — log scale")
+ax.hist(prices, bins=50, range=(0, upper_limit), alpha=0.75)
+ax.set_xlim(0, upper_limit)
+ax.set_xlabel("Launch Price ($)")
 ax.set_ylabel("Number of Games")
 ax.set_title("Distribution of Indie Game Launch Prices")
 
@@ -195,7 +196,7 @@ st.pyplot(fig, use_container_width=True)
 plt.close(fig)
 
 # -- Genre Pricing -------------------------------------------------------------
-st.header("🎮 Genre and Launch Price")
+st.header("Genre and Launch Price")
 
 genre_rows = []
 
@@ -219,7 +220,7 @@ genre_df = pd.DataFrame(genre_rows).sort_values("Median Price", ascending=True)
 fig, ax = plt.subplots(figsize=(10, max(5, len(genre_df) * 0.35)))
 
 ax.barh(genre_df["Genre"], genre_df["Median Price"])
-
+ax.set_xlim(0, price_cap)
 ax.set_xlabel("Median Launch Price ($)")
 ax.set_ylabel("Genre")
 ax.set_title("Median Launch Price by Genre")
@@ -234,7 +235,7 @@ st.dataframe(
 )
 
 # -- Game Scope vs Price -------------------------------------------------------
-st.header("🎯 Game Scope and Launch Price")
+st.header("Game Scope and Launch Price")
 
 scope_cols = st.columns(3)
 
@@ -249,6 +250,7 @@ for col, (feature, label) in zip(scope_cols, scope_features):
         fig, ax = plt.subplots(figsize=(5, 4))
 
         ax.scatter(price_df[feature], price_df["launch_price"], alpha=0.25, s=12)
+        ax.set_ylim(0, price_cap)
 
         ax.set_xlabel(label)
         ax.set_ylabel("Launch Price ($)")
@@ -258,7 +260,7 @@ for col, (feature, label) in zip(scope_cols, scope_features):
         plt.close(fig)
 
 # -- Discount Strategy ---------------------------------------------------------
-st.header("🏷️ Discount Strategy")
+st.header("Discount Strategy")
 
 discount_cols = st.columns(4)
 discount_cols[0].metric("Games launched with discount", f"{discount_pct:.1f}%")
@@ -269,9 +271,8 @@ discount_cols[3].metric("Median discount events", f"{price_df['n_discount_events
 fig, ax = plt.subplots(figsize=(9, 5))
 
 ax.scatter(price_df["launch_price"], price_df["avg_discount_pct"], alpha=0.25, s=12)
-
-ax.set_xscale("log")
-ax.set_xlabel("Launch Price ($) — log scale")
+ax.set_xlim(0, price_cap)
+ax.set_xlabel("Launch Price ($)")
 ax.set_ylabel("Average Discount (%)")
 ax.set_title("Launch Price vs Average Discount")
 
@@ -281,172 +282,119 @@ plt.close(fig)
 fig, ax = plt.subplots(figsize=(9, 5))
 
 ax.scatter(price_df["n_discount_events"], price_df["launch_price"], alpha=0.25, s=12)
-
-ax.set_yscale("log")
+ax.set_ylim(0, price_cap)
 ax.set_xlabel("Number of Discount Events")
-ax.set_ylabel("Launch Price ($) — log scale")
+ax.set_ylabel("Launch Price ($)")
 ax.set_title("Discount Frequency vs Launch Price")
 
 st.pyplot(fig, use_container_width=True)
 plt.close(fig)
 
+# -- Conclusion ------------------------------------------------------------------
+st.markdown("""
+## Conclusion
 
-# -- Models --------------------------------------------------------------------
-@st.cache_resource
-def load_models():
-    mlflow.set_tracking_uri("databricks")
-    return (
-        mlflow.sklearn.load_model(PYCARET_RUN_URI),
-        mlflow.sklearn.load_model(RF_RUN_URI),
-    )
+The data shows a weak relationship between game scope and launch price, weaker than the original hypothesis proposed, and driven more by popularity and genre-type signals than by the specific content-scope features named.
 
+**Model performance.** The best model (LightGBM, R²=0.237) outperforms linear regression (R²=0.141) and a mean-only baseline (R²≈0), showing the relationship has some non-linear structure. However, even the best model explains under a quarter of price variance, and performance is unstable across folds (R² ranging 0.10–0.38) — most of what determines an indie game's price isn't captured by scope or metadata at all.
 
-pycaret_model, rf_model = load_models()
+**What actually predicts price doesn't match the hypothesis.** The top predictors are `total_tag_votes`, `days_since_release`, and `peak_ccu` are popularity and engagement signals, not content scope. The features the hypothesis specifically named (**DLC count and platform/language support**) show no visible relationship with price in the data. Achievement count is predictive, but in the opposite direction expected: very high achievement counts cluster at *low* prices, consistent with low-effort "achievement farming" titles rather than content-rich games.
 
-st.header("💰 Indie Game Pricing Strategy")
-st.write("Explore how game features, scope and other characteristics are associated with indie game pricing.")
+**Genre reflects product type more than content depth.** The highest median prices belong to productivity/creative tools (Web Publishing, Video Production, Game Development, Design & Illustration, \~\$15–20) rather than games. Actual game genres cluster around \$8–10, with Casual/Indie/Free-to-Play lowest (\~\$5–6). This suggests genre is partly separating "software tool" from "game" rather than measuring scope within games.
 
-st.header("Models and model performance")
-model_cols = st.columns(2)
-for (name, model), col in zip(
-    [("PyCaret Best Model", pycaret_model), ("Random Forest", rf_model)],
-    model_cols,
-):
-    y_pred = model.predict(X_test)
-    r2 = r2_score(y_test, y_pred)
-    rmse = root_mean_squared_error(
-        y_test,
-        y_pred,
-    )
-    mae = mean_absolute_error(y_test, y_pred)
+**Price follows convention, not a continuous function of scope.** Launch prices spike sharply at Steam's standard price points (\$4.99, \$9.99, \$14.99, \$19.99, \$24.99), suggesting developers select from a small set of conventional tiers rather than pricing continuously based on features which limits how well any regression can fit the underlying decision.
 
-    with col:
-        st.subheader(name)
-        m1, m2, m3 = st.columns(3)
-        m1.metric("R²", f"{r2:.4f}")
-        m2.metric("RMSE", f"${rmse:.2f}")
-        m3.metric("MAE", f"${mae:.2f}")
+**Discounting is a launch-week convention, not a sustained strategy.** While 66.8\% of games launch with a discount, the median game spends only 0.1\% of its lifetime on sale. The discount pattern is dominated by one-time launch promotions rather than repeated, ongoing discounting. Discount frequency and depth show no clear relationship with price tier.
 
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.scatter(y_test, y_pred, alpha=0.3, s=15, color="steelblue")
-        lims = [min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())]
-        ax.plot(lims, lims, "r--", lw=1.5, label="Perfect fit")
-        ax.set_xlabel("Actual ($)")
-        ax.set_ylabel("Predicted ($)")
-        ax.set_title("Predicted vs Actual")
-        ax.legend(fontsize=8)
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-st.header("Random Forest Feature Importance")
-top_n = st.slider("Top N features", 5, len(feature_names), 20)
-fi_df = pd.DataFrame({"feature": feature_names, "importance": rf_model.feature_importances_}).sort_values("importance", ascending=False).head(top_n)
-
-fig, ax = plt.subplots(figsize=(9, max(4, top_n * 0.35)))
-ax.barh(fi_df["feature"][::-1], fi_df["importance"][::-1], color="steelblue")
-ax.set_xlabel("Importance")
-ax.set_title(f"Top {top_n} Features — Random Forest")
-plt.tight_layout()
-st.pyplot(fig, use_container_width=True)
-plt.close(fig)
+**Overall:** the hypothesis is partially supported (pricing is patterned and non-random) but the mechanism differs from what was proposed. Popularity and product-type signals explain more of the variation than the specific scope features (achievements, DLC, platform/language support) originally hypothesized to drive price.
+""")
 
 
-@st.cache_data
-def calculate_shap_values(_model, X):
-    explainer = shap.TreeExplainer(_model)
-    return explainer.shap_values(X)
-
-
-st.header("SHAP Model Explainability")
-n_samples = st.slider("Sample size", 50, min(300, len(X_test)), 100)
-X_shap = X_test.sample(n_samples, random_state=42)
-
-with st.spinner("Computing SHAP values..."):
-    shap_values = calculate_shap_values(rf_model, X_shap)
-
-st.markdown("**Beeswarm — feature impact distribution**")
-shap.summary_plot(shap_values, X_shap, feature_names=feature_names, show=False)
-st.pyplot(plt.gcf(), use_container_width=True)
-plt.clf()
-
-st.markdown("**Bar — mean |SHAP| per feature**")
-shap.summary_plot(
-    shap_values,
-    X_shap,
-    feature_names=feature_names,
-    plot_type="bar",
-    show=False,
-)
-st.pyplot(plt.gcf(), use_container_width=True)
-plt.clf()
-
-# # -- Tabs ----------------------------------------------------------------------
-# tab1, tab2, tab3 = st.tabs(["📊 Model Performance", "📌 Feature Importance", "🔍 SHAP Explainability"])
-
-# # -- Tab 1: Performance --------------------------------------------------------
-# with tab1:
-#     cols = st.columns(2)
-#     for (name, model), col in zip(
-#         [("PyCaret Best Model", pycaret_model), ("Random Forest", rf_model)], cols
-#     ):
-#         y_pred = model.predict(X_test)
-#         r2   = r2_score(y_test, y_pred)
-#         rmse = root_mean_squared_error(y_test, y_pred, squared=False)
-#         mae  = mean_absolute_error(y_test, y_pred)
-
-#         with col:
-#             st.subheader(name)
-#             m1, m2, m3 = st.columns(3)
-#             m1.metric("R²",   f"{r2:.4f}")
-#             m2.metric("RMSE", f"${rmse:.2f}")
-#             m3.metric("MAE",  f"${mae:.2f}")
-
-#             fig, ax = plt.subplots(figsize=(5, 4))
-#             ax.scatter(y_test, y_pred, alpha=0.3, s=15, color="steelblue")
-#             lims = [min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())]
-#             ax.plot(lims, lims, "r--", lw=1.5, label="Perfect fit")
-#             ax.set_xlabel("Actual ($)")
-#             ax.set_ylabel("Predicted ($)")
-#             ax.set_title("Predicted vs Actual")
-#             ax.legend(fontsize=8)
-#             st.pyplot(fig, use_container_width=True)
-#             plt.close(fig)
-
-# # -- Tab 2: Feature Importance -------------------------------------------------
-# with tab2:
-#     st.subheader("Random Forest Feature Importance")
-#     top_n = st.slider("Top N features", 5, len(feature_names), 20)
-#     fi_df = (
-#         pd.DataFrame({"feature": feature_names, "importance": rf_model.feature_importances_})
-#         .sort_values("importance", ascending=False)
-#         .head(top_n)
+# # -- Models --------------------------------------------------------------------
+# @st.cache_resource
+# def load_models():
+#     mlflow.set_tracking_uri("databricks")
+#     return (
+#         mlflow.sklearn.load_model(PYCARET_RUN_URI),
+#         mlflow.sklearn.load_model(RF_RUN_URI),
 #     )
 
-#     fig, ax = plt.subplots(figsize=(9, max(4, top_n * 0.35)))
-#     ax.barh(fi_df["feature"][::-1], fi_df["importance"][::-1], color="steelblue")
-#     ax.set_xlabel("Importance")
-#     ax.set_title(f"Top {top_n} Features — Random Forest")
-#     plt.tight_layout()
-#     st.pyplot(fig, use_container_width=True)
-#     plt.close(fig)
 
-# # -- Tab 3: SHAP ----------------------------------------------------------------
-# with tab3:
-#     st.subheader("SHAP Explainability — Random Forest")
-#     n_samples = st.slider("Sample size", 50, min(300, len(X_test)), 100)
-#     X_shap = X_test.sample(n_samples, random_state=42)
+# pycaret_model, rf_model = load_models()
 
-#     with st.spinner("Computing SHAP values..."):
-#         explainer   = shap.TreeExplainer(rf_model)
-#         shap_values = explainer.shap_values(X_shap)
+# st.header("💰 Indie Game Pricing Strategy")
+# st.write("Explore how game features, scope and other characteristics are associated with indie game pricing.")
 
-#     st.markdown("**Beeswarm — feature impact distribution**")
-#     shap.summary_plot(shap_values, X_shap, feature_names=feature_names, show=False)
-#     st.pyplot(plt.gcf(), use_container_width=True)
-#     plt.clf()
+# st.header("Models and model performance")
+# model_cols = st.columns(2)
+# for (name, model), col in zip(
+#     [("PyCaret Best Model", pycaret_model), ("Random Forest", rf_model)],
+#     model_cols,
+# ):
+#     y_pred = model.predict(X_test)
+#     r2 = r2_score(y_test, y_pred)
+#     rmse = root_mean_squared_error(
+#         y_test,
+#         y_pred,
+#     )
+#     mae = mean_absolute_error(y_test, y_pred)
 
-#     st.markdown("**Bar — mean |SHAP| per feature**")
-#     shap.summary_plot(shap_values, X_shap, feature_names=feature_names,
-#                       plot_type="bar", show=False)
-#     st.pyplot(plt.gcf(), use_container_width=True)
-#     plt.clf()
+#     with col:
+#         st.subheader(name)
+#         m1, m2, m3 = st.columns(3)
+#         m1.metric("R²", f"{r2:.4f}")
+#         m2.metric("RMSE", f"${rmse:.2f}")
+#         m3.metric("MAE", f"${mae:.2f}")
+
+#         fig, ax = plt.subplots(figsize=(5, 4))
+#         ax.scatter(y_test, y_pred, alpha=0.3, s=15, color="steelblue")
+#         lims = [min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())]
+#         ax.plot(lims, lims, "r--", lw=1.5, label="Perfect fit")
+#         ax.set_xlabel("Actual ($)")
+#         ax.set_ylabel("Predicted ($)")
+#         ax.set_title("Predicted vs Actual")
+#         ax.legend(fontsize=8)
+#         st.pyplot(fig, use_container_width=True)
+#         plt.close(fig)
+
+# st.header("Random Forest Feature Importance")
+# top_n = st.slider("Top N features", 5, len(feature_names), 20)
+# fi_df = pd.DataFrame({"feature": feature_names, "importance": rf_model.feature_importances_}).sort_values("importance", ascending=False).head(top_n)
+
+# fig, ax = plt.subplots(figsize=(9, max(4, top_n * 0.35)))
+# ax.barh(fi_df["feature"][::-1], fi_df["importance"][::-1], color="steelblue")
+# ax.set_xlabel("Importance")
+# ax.set_title(f"Top {top_n} Features — Random Forest")
+# plt.tight_layout()
+# st.pyplot(fig, use_container_width=True)
+# plt.close(fig)
+
+
+# @st.cache_data
+# def calculate_shap_values(_model, X):
+#     explainer = shap.TreeExplainer(_model)
+#     return explainer.shap_values(X)
+
+
+# st.header("SHAP Model Explainability")
+# n_samples = st.slider("Sample size", 50, min(300, len(X_test)), 100)
+# X_shap = X_test.sample(n_samples, random_state=42)
+
+# with st.spinner("Computing SHAP values..."):
+#     shap_values = calculate_shap_values(rf_model, X_shap)
+
+# st.markdown("**Beeswarm — feature impact distribution**")
+# shap.summary_plot(shap_values, X_shap, feature_names=feature_names, show=False)
+# st.pyplot(plt.gcf(), use_container_width=True)
+# plt.clf()
+
+# st.markdown("**Bar — mean |SHAP| per feature**")
+# shap.summary_plot(
+#     shap_values,
+#     X_shap,
+#     feature_names=feature_names,
+#     plot_type="bar",
+#     show=False,
+# )
+# st.pyplot(plt.gcf(), use_container_width=True)
+# plt.clf()
