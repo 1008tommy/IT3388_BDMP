@@ -12,7 +12,7 @@ from databricks.sdk.core import Config
 
 TABLE_NAME = os.getenv(
     "REVIEW_TABLE",
-    "it3388.it3388.gold_review_analysis_final"
+    "workspace.it3388.gold_review_analysis_final"
 )
 
 WAREHOUSE_ID = os.getenv(
@@ -1479,7 +1479,7 @@ import mlflow.transformers
 # MODEL SETTINGS
 # ---------------------------------------------------------
 
-MODEL_RUN_ID = "0bf150ccb69f499685bd83b0bdad9019"
+MODEL_RUN_ID = "2472d4ed15474268a3d27cc2a880f395"
 
 MODEL_URI = (
     f"runs:/{MODEL_RUN_ID}/"
