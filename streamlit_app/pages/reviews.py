@@ -1483,7 +1483,7 @@ MODEL_RUN_ID = "2472d4ed15474268a3d27cc2a880f395"
 
 MODEL_URI = (
     f"runs:/{MODEL_RUN_ID}/"
-    "tuned_modernbert_expanded_v2"
+    "modernbert_expanded_tuned_v2"
 )
 
 PREDICTION_THRESHOLD = 0.50
