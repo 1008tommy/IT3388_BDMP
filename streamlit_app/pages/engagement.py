@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 # =========================================================
 
 mlflow.set_tracking_uri("databricks")
-MLFLOW_EXPERIMENT = "/Users/darrenchor1832@gmail.com/game_performance_models"
+MLFLOW_EXPERIMENT = "/Users/242475r@mymail.nyp.edu.sg/IT3388_BDMP/game_performance_models"
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
 # =========================================================
