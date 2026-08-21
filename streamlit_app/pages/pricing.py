@@ -112,7 +112,7 @@ def load_data():
     genre_dummy_cols = [c for c in price_df.columns if c.startswith("genres_")]
 
     # Review ratio
-    price_df["review_ratio"] = price_df["positive"] / (price_df["positive"] + price_df["negative"]).replace(0, np.nan)
+    # price_df["review_ratio"] = price_df["positive"] / (price_df["positive"] + price_df["negative"]).replace(0, np.nan)
 
     # Features
     scope = [
