@@ -21,9 +21,9 @@ RAW_LIST_COLS = ["supported_languages", "full_audio_languages", "developers", "p
 
 # -- Load Data -----------------------------------------------------------------
 
-PRICE_TABLE = os.getenv("PRICE_TABLE", "it3388.it3388.gold_price_summary")
+PRICE_TABLE = os.getenv("PRICE_TABLE", "workspace.it3388.gold_price_summary")
 
-METADATA_TABLE = os.getenv("METADATA_TABLE", "it3388.it3388.silver_game_metadata")
+METADATA_TABLE = os.getenv("METADATA_TABLE", "workspace.it3388.silver_game_metadata")
 
 WAREHOUSE_ID = os.getenv("DATABRICKS_WAREHOUSE_ID")
 
