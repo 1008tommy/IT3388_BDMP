@@ -111,53 +111,14 @@ def load_data():
     # Genre dummy columns
     genre_dummy_cols = [c for c in price_df.columns if c.startswith("genres_")]
 
-    # Review ratio
-    # price_df["review_ratio"] = price_df["positive"] / (price_df["positive"] + price_df["negative"]).replace(0, np.nan)
-
-    # Features
-    scope = [
-        "platform_count",
-        "supported_languages_count",
-        "audio_languages_count",
-        "category_count",
-        "genre_count",
-        "tag_count",
-        "total_tag_votes",
-        "tag_diversity",
-        "dlc_count",
-        "achievements",
-    ]
-
-    control = [
-        "positive",
-        "negative",
-        "average_playtime_forever",
-        "median_playtime_forever",
-        "peak_ccu",
-        "recommendations",
-        "days_since_release",
-    ]
-
-    feature_names = scope + control + genre_dummy_cols
-
-    # Remove rows with missing model features
-    price_df = price_df.dropna(subset=feature_names + ["launch_price"])
-
-    X = price_df[feature_names]
-    y = price_df["launch_price"]
-
-    _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
     return (
         price_df,
-        X_test,
-        y_test,
         feature_names,
         genre_dummy_cols,
     )
 
 
-price_df, X_test, y_test, feature_names, genre_dummy_cols = load_data()
+price_df, feature_names, genre_dummy_cols = load_data()
 price_cap = price_df["launch_price"].quantile(0.99)
 
 # -- Overview ------------------------------------------------------------------
