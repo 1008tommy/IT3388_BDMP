@@ -1,3 +1,7 @@
+# =============================================================================
+# CONFIG + LOAD DATA
+# =============================================================================
+
 import streamlit as st
 import mlflow
 import mlflow.sklearn
@@ -5,177 +9,397 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import shap
-from sklearn.metrics import r2_score, root_mean_squared_error, mean_absolute_error
-from sklearn.model_selection import train_test_split
 import os
+
+from sklearn.metrics import (
+    r2_score,
+    root_mean_squared_error,
+    mean_absolute_error
+)
+
+from sklearn.model_selection import train_test_split
+
 from databricks import sql
 from databricks.sdk.core import Config
 
-# -- Config --------------------------------------------------------------------
-PYCARET_RUN_URI = "runs:/3e9c0f4b46e846faba9cacdaaa1aae24/model"
-RF_RUN_URI = "runs:/99c1924e7e674d659dad7348bd0db61b/model"
-GOLD_PATH = "/Workspace/Users/242475r@mymail.nyp.edu.sg/IT3388_BDMP/gold_price_summary.csv"
-METADATA_PATH = "/Workspace/Users/242475r@mymail.nyp.edu.sg/IT3388_BDMP/silver_game_metadata.csv"
-RAW_LIST_COLS = ["supported_languages", "full_audio_languages", "developers", "publishers", "categories", "genres", "tags"]
+
+# =============================================================================
+# DAMIEN'S TABLES
+# IMPORTANT:
+# Use fixed names here so Darren/Xiaoyao environment variables
+# cannot accidentally replace Damien's tables.
+# =============================================================================
+
+DAMIEN_PRICE_TABLE = (
+    "workspace.it3388.gold_price_summary"
+)
+
+DAMIEN_METADATA_TABLE = (
+    "workspace.it3388.silver_game_metadata"
+)
 
 
-# -- Load Data -----------------------------------------------------------------
+# MLflow models
+PYCARET_RUN_URI = (
+    "runs:/3e9c0f4b46e846faba9cacdaaa1aae24/model"
+)
 
-PRICE_TABLE = os.getenv("PRICE_TABLE", "workspace.it3388.gold_price_summary")
+RF_RUN_URI = (
+    "runs:/99c1924e7e674d659dad7348bd0db61b/model"
+)
 
-METADATA_TABLE = os.getenv("METADATA_TABLE", "workspace.it3388.silver_game_metadata")
 
-WAREHOUSE_ID = os.getenv("DATABRICKS_WAREHOUSE_ID")
+# Columns containing arrays / lists that are not needed
+RAW_LIST_COLS = [
+    "supported_languages",
+    "full_audio_languages",
+    "developers",
+    "publishers",
+    "categories",
+    "genres",
+    "tags"
+]
+
+
+# SQL Warehouse
+WAREHOUSE_ID = os.getenv(
+    "DATABRICKS_WAREHOUSE_ID"
+)
 
 cfg = Config()
 
 
+# =============================================================================
+# DATABASE CONNECTION
+# =============================================================================
+
 def get_connection():
 
     if not WAREHOUSE_ID:
-        st.error("SQL Warehouse resource is not configured. Add the SQL Warehouse to the Databricks App.")
+
+        st.error(
+            "SQL Warehouse resource is not configured. "
+            "Add the SQL Warehouse to the Databricks App."
+        )
+
         st.stop()
+
 
     server_hostname = cfg.host
 
     if server_hostname.startswith("https://"):
-        server_hostname = server_hostname.replace("https://", "")
-    elif server_hostname.startswith("http://"):
-        server_hostname = server_hostname.replace("http://", "")
+        server_hostname = server_hostname.replace(
+            "https://",
+            ""
+        )
 
-    http_path = f"/sql/1.0/warehouses/{WAREHOUSE_ID}"
+    elif server_hostname.startswith("http://"):
+        server_hostname = server_hostname.replace(
+            "http://",
+            ""
+        )
+
+
+    http_path = (
+        f"/sql/1.0/warehouses/{WAREHOUSE_ID}"
+    )
+
 
     return sql.connect(
         server_hostname=server_hostname,
         http_path=http_path,
         credentials_provider=lambda: cfg.authenticate,
         use_cloud_fetch=False,
-        _use_arrow_native_complex_types=False,
+        _use_arrow_native_complex_types=False
     )
 
 
-# Replace the load_data function in your Streamlit app with this:
+# =============================================================================
+# LOAD DAMIEN'S DATA
+# =============================================================================
 
 @st.cache_data
 def load_data():
+
     conn = get_connection()
-    
+
     try:
-        # Explicitly select needed columns to avoid issues with complex types
-        gold_query = f"""
-        SELECT 
-            steam_id,
-            launch_price,
-            launched_with_discount,
-            min_price,
-            max_price,
-            min_base_price,
-            max_base_price,
-            avg_discount_pct,
-            pct_time_discounted,
-            n_discount_events,
-            price_volatility,
-            n_price_changes,
-            has_price_history
-        FROM {PRICE_TABLE}
-        """
-        
-        meta_query = f"""
-        SELECT 
-            app_id,
-            name,
-            release_date,
-            estimated_owners,
-            dlc_count,
-            achievements,
-            positive,
-            negative,
-            average_playtime_forever,
-            median_playtime_forever,
-            peak_ccu,
-            recommendations,
-            platform_count,
-            supported_languages_count,
-            audio_languages_count,
-            category_count,
-            genre_count,
-            tag_count,
-            total_tag_votes,
-            tag_diversity,
-            days_since_release
-        FROM {METADATA_TABLE}
-        WHERE dlc_count IS NOT NULL 
-          AND achievements IS NOT NULL
-        """
-        
-        # Add genre columns dynamically
-        genre_cols_query = f"""
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_schema = 'it3388' 
-          AND table_name = 'silver_game_metadata'
-          AND column_name LIKE 'genres_%'
-        """
-        
-        # Get genre column names
-        try:
-            genre_cols_df = pd.read_sql(genre_cols_query, conn)
-            genre_cols = genre_cols_df['column_name'].tolist()
-            if genre_cols:
-                meta_query = meta_query.replace(
-                    "days_since_release",
-                    "days_since_release,\n            " + ",\n            ".join(genre_cols)
-                )
-        except:
-            # If genre columns query fails, use a subset
-            pass
-        
-        gold = pd.read_sql(gold_query, conn)
-        meta = pd.read_sql(meta_query, conn)
-        
+
+        # ---------------------------------------------------------------------
+        # Load Damien's pricing table
+        # ---------------------------------------------------------------------
+
+        gold = pd.read_sql(
+            f"""
+            SELECT *
+            FROM {DAMIEN_PRICE_TABLE}
+            """,
+            conn
+        )
+
+
+        # ---------------------------------------------------------------------
+        # Load game metadata
+        # ---------------------------------------------------------------------
+
+        meta = pd.read_sql(
+            f"""
+            SELECT *
+            FROM {DAMIEN_METADATA_TABLE}
+            """,
+            conn
+        )
+
+
     finally:
+
         conn.close()
-    
-    # Type conversions
-    gold = gold.astype({
-        "steam_id": "int64",
-        "launch_price": "float64",
-        "launched_with_discount": "bool",
-        "min_price": "float64",
-        "max_price": "float64",
-        "min_base_price": "float64",
-        "max_base_price": "float64",
-        "avg_discount_pct": "float64",
-        "pct_time_discounted": "float64",
-        "n_discount_events": "int64",
-        "price_volatility": "int64",
-        "n_price_changes": "int64",
-        "has_price_history": "bool",
-    }).dropna()
-    
-    meta = meta.astype({
-        "app_id": "int64",
-        "name": "string",
-        "release_date": "datetime64[ns]",
-        "estimated_owners": "string",
-        "dlc_count": "int64",
-        "achievements": "int64",
-    })
-    
-    # Merge
-    price_df = meta.merge(gold, left_on="app_id", right_on="steam_id")
-    
-    # Remove free games
-    price_df = price_df[price_df["launch_price"] != 0].copy()
-    
-    # Get genre columns
-    genre_dummy_cols = [c for c in price_df.columns if c.startswith("genres_")]
-    
-    return price_df, genre_dummy_cols
+
+
+    # =========================================================================
+    # CLEAN DATA TYPES
+    # =========================================================================
+
+    gold = gold.astype(
+        {
+            "steam_id": "int64",
+            "launch_price": "float64",
+            "launched_with_discount": "bool",
+            "min_price": "float64",
+            "max_price": "float64",
+            "min_base_price": "float64",
+            "max_base_price": "float64",
+            "avg_discount_pct": "float64",
+            "pct_time_discounted": "float64",
+            "n_discount_events": "int64",
+            "price_volatility": "int64",
+            "n_price_changes": "int64",
+            "has_price_history": "bool"
+        }
+    )
+
+
+    meta["app_id"] = pd.to_numeric(
+        meta["app_id"],
+        errors="coerce"
+    )
+
+
+    meta = meta.dropna(
+        subset=["app_id"]
+    )
+
+
+    meta["app_id"] = (
+        meta["app_id"]
+        .astype("int64")
+    )
+
+
+    if "name" in meta.columns:
+
+        meta["name"] = (
+            meta["name"]
+            .astype("string")
+        )
+
+
+    if "release_date" in meta.columns:
+
+        meta["release_date"] = pd.to_datetime(
+            meta["release_date"],
+            errors="coerce"
+        )
+
+
+    if "estimated_owners" in meta.columns:
+
+        meta["estimated_owners"] = (
+            meta["estimated_owners"]
+            .astype("string")
+        )
+
+
+    # =========================================================================
+    # MERGE PRICE + METADATA
+    # =========================================================================
+
+    price_df = meta.merge(
+        gold,
+        left_on="app_id",
+        right_on="steam_id",
+        how="inner",
+        suffixes=("_meta", "_price")
+    )
+
+
+    # =========================================================================
+    # FIX DUPLICATE COLUMN NAMES IF BOTH TABLES CONTAIN SAME COLUMN
+    # =========================================================================
+
+    required_metadata_columns = [
+        "dlc_count",
+        "achievements",
+        "platform_count"
+    ]
+
+
+    for feature in required_metadata_columns:
+
+        meta_version = (
+            f"{feature}_meta"
+        )
+
+        price_version = (
+            f"{feature}_price"
+        )
+
+
+        # Prefer metadata version
+        if meta_version in price_df.columns:
+
+            price_df[feature] = (
+                price_df[meta_version]
+            )
+
+
+        # Otherwise use price table version
+        elif price_version in price_df.columns:
+
+            price_df[feature] = (
+                price_df[price_version]
+            )
+
+
+    # =========================================================================
+    # CHECK REQUIRED COLUMNS
+    # =========================================================================
+
+    required_columns = [
+        "launch_price",
+        "dlc_count",
+        "achievements",
+        "platform_count"
+    ]
+
+
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in price_df.columns
+    ]
+
+
+    if missing_columns:
+
+        st.error(
+            "Damien's Streamlit page is missing these "
+            f"required columns: {missing_columns}"
+        )
+
+        st.write(
+            "Columns currently loaded:"
+        )
+
+        st.write(
+            price_df.columns.tolist()
+        )
+
+        st.stop()
+
+
+    # =========================================================================
+    # NUMERIC CLEANING
+    # =========================================================================
+
+    for column in [
+        "launch_price",
+        "dlc_count",
+        "achievements",
+        "platform_count"
+    ]:
+
+        price_df[column] = pd.to_numeric(
+            price_df[column],
+            errors="coerce"
+        )
+
+
+    # Remove rows missing essential values
+    price_df = price_df.dropna(
+        subset=[
+            "launch_price",
+            "dlc_count",
+            "achievements",
+            "platform_count"
+        ]
+    )
+
+
+    # =========================================================================
+    # REMOVE FREE GAMES
+    # =========================================================================
+
+    price_df = price_df[
+        price_df["launch_price"] != 0
+    ].copy()
+
+
+    # =========================================================================
+    # REMOVE RAW LIST COLUMNS
+    # =========================================================================
+
+    price_df = price_df.drop(
+        columns=RAW_LIST_COLS,
+        errors="ignore"
+    )
+
+
+    # =========================================================================
+    # FIND GENRE DUMMY COLUMNS
+    # =========================================================================
+
+    genre_dummy_cols = [
+        column
+        for column in price_df.columns
+        if column.startswith("genres_")
+    ]
+
+
+    return (
+        price_df,
+        genre_dummy_cols
+    )
+
+
+# =============================================================================
+# LOAD DATA
+# =============================================================================
 
 price_df, genre_dummy_cols = load_data()
-st.write(price_df.columns) #DEBUG
-price_cap = price_df["launch_price"].quantile(0.99)
+
+
+# Temporary debugging
+st.write(
+    "Loaded Damien price page successfully."
+)
+
+st.write(
+    "Number of games:",
+    len(price_df)
+)
+
+st.write(
+    "DLC column found:",
+    "dlc_count" in price_df.columns
+)
+
+
+# Used throughout the dashboard
+price_cap = (
+    price_df["launch_price"]
+    .quantile(0.99)
+)
 
 # -- Overview ------------------------------------------------------------------
 st.header("Overview of Indie Games")
