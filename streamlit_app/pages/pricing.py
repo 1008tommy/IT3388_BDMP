@@ -54,68 +54,124 @@ def get_connection():
     )
 
 
+# Replace the load_data function in your Streamlit app with this:
+
 @st.cache_data
 def load_data():
-
     conn = get_connection()
-
+    
     try:
-        # Load the two Unity Catalog tables
-        gold = pd.read_sql(f"SELECT * FROM {PRICE_TABLE}", conn)
-
-        meta = pd.read_sql(f"SELECT * FROM {METADATA_TABLE}", conn)
-
+        # Explicitly select needed columns to avoid issues with complex types
+        gold_query = f"""
+        SELECT 
+            steam_id,
+            launch_price,
+            launched_with_discount,
+            min_price,
+            max_price,
+            min_base_price,
+            max_base_price,
+            avg_discount_pct,
+            pct_time_discounted,
+            n_discount_events,
+            price_volatility,
+            n_price_changes,
+            has_price_history
+        FROM {PRICE_TABLE}
+        """
+        
+        meta_query = f"""
+        SELECT 
+            app_id,
+            name,
+            release_date,
+            estimated_owners,
+            dlc_count,
+            achievements,
+            positive,
+            negative,
+            average_playtime_forever,
+            median_playtime_forever,
+            peak_ccu,
+            recommendations,
+            platform_count,
+            supported_languages_count,
+            audio_languages_count,
+            category_count,
+            genre_count,
+            tag_count,
+            total_tag_votes,
+            tag_diversity,
+            days_since_release
+        FROM {METADATA_TABLE}
+        WHERE dlc_count IS NOT NULL 
+          AND achievements IS NOT NULL
+        """
+        
+        # Add genre columns dynamically
+        genre_cols_query = f"""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'it3388' 
+          AND table_name = 'silver_game_metadata'
+          AND column_name LIKE 'genres_%'
+        """
+        
+        # Get genre column names
+        try:
+            genre_cols_df = pd.read_sql(genre_cols_query, conn)
+            genre_cols = genre_cols_df['column_name'].tolist()
+            if genre_cols:
+                meta_query = meta_query.replace(
+                    "days_since_release",
+                    "days_since_release,\n            " + ",\n            ".join(genre_cols)
+                )
+        except:
+            # If genre columns query fails, use a subset
+            pass
+        
+        gold = pd.read_sql(gold_query, conn)
+        meta = pd.read_sql(meta_query, conn)
+        
     finally:
         conn.close()
-
-    # -------------------------------------------------------------------------
-    # Same processing as your original code
-    # -------------------------------------------------------------------------
-
-    gold = gold.astype(
-        {
-            "steam_id": "int64",
-            "launch_price": "float64",
-            "launched_with_discount": "bool",
-            "min_price": "float64",
-            "max_price": "float64",
-            "min_base_price": "float64",
-            "max_base_price": "float64",
-            "avg_discount_pct": "float64",
-            "pct_time_discounted": "float64",
-            "n_discount_events": "int64",
-            "price_volatility": "int64",
-            "n_price_changes": "int64",
-            "has_price_history": "bool",
-        }
-    ).dropna()
-
-    meta = meta.astype(
-        {
-            "app_id": "int64",
-            "name": "string",
-            "release_date": "datetime64[ns]",
-            "estimated_owners": "string",
-        }
-    )
-
-    # Merge price + metadata
+    
+    # Type conversions
+    gold = gold.astype({
+        "steam_id": "int64",
+        "launch_price": "float64",
+        "launched_with_discount": "bool",
+        "min_price": "float64",
+        "max_price": "float64",
+        "min_base_price": "float64",
+        "max_base_price": "float64",
+        "avg_discount_pct": "float64",
+        "pct_time_discounted": "float64",
+        "n_discount_events": "int64",
+        "price_volatility": "int64",
+        "n_price_changes": "int64",
+        "has_price_history": "bool",
+    }).dropna()
+    
+    meta = meta.astype({
+        "app_id": "int64",
+        "name": "string",
+        "release_date": "datetime64[ns]",
+        "estimated_owners": "string",
+        "dlc_count": "int64",
+        "achievements": "int64",
+    })
+    
+    # Merge
     price_df = meta.merge(gold, left_on="app_id", right_on="steam_id")
-
+    
     # Remove free games
     price_df = price_df[price_df["launch_price"] != 0].copy()
-
-    # Remove raw list columns
-    price_df = price_df.drop(columns=RAW_LIST_COLS, errors="ignore")
-
-    # Genre dummy columns
+    
+    # Get genre columns
     genre_dummy_cols = [c for c in price_df.columns if c.startswith("genres_")]
-
-    return (
-        price_df,
-        genre_dummy_cols,
-    )
-
+    
+    return price_df, genre_dummy_cols
 
 price_df, genre_dummy_cols = load_data()
 st.write(price_df.columns) #DEBUG
