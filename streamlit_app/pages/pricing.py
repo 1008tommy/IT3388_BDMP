@@ -138,7 +138,7 @@ def load_data():
         "days_since_release",
     ]
 
-    feature_names = scope + control + genre_dummy_cols + ["review_ratio"]
+    feature_names = scope + control + genre_dummy_cols
 
     # Remove rows with missing model features
     price_df = price_df.dropna(subset=feature_names + ["launch_price"])
