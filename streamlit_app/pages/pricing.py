@@ -118,6 +118,7 @@ def load_data():
 
 
 price_df, genre_dummy_cols = load_data()
+st.write(price_df.columns) #DEBUG
 price_cap = price_df["launch_price"].quantile(0.99)
 
 # -- Overview ------------------------------------------------------------------
