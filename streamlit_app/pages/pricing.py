@@ -113,12 +113,11 @@ def load_data():
 
     return (
         price_df,
-        feature_names,
         genre_dummy_cols,
     )
 
 
-price_df, feature_names, genre_dummy_cols = load_data()
+price_df, genre_dummy_cols = load_data()
 price_cap = price_df["launch_price"].quantile(0.99)
 
 # -- Overview ------------------------------------------------------------------
