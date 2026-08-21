@@ -14,8 +14,8 @@ from databricks.sdk.core import Config
 # -- Config --------------------------------------------------------------------
 PYCARET_RUN_URI = "runs:/3e9c0f4b46e846faba9cacdaaa1aae24/model"
 RF_RUN_URI = "runs:/99c1924e7e674d659dad7348bd0db61b/model"
-GOLD_PATH = "/Volumes/darren/default/it3388/gold_price_summary.csv"
-METADATA_PATH = "/Volumes/darren/default/it3388/silver_game_metadata.csv"
+GOLD_PATH = "/Workspace/Users/242475r@mymail.nyp.edu.sg/IT3388_BDMP/gold_price_summary.csv"
+METADATA_PATH = "/Workspace/Users/242475r@mymail.nyp.edu.sg/IT3388_BDMP/silver_game_metadata.csv"
 RAW_LIST_COLS = ["supported_languages", "full_audio_languages", "developers", "publishers", "categories", "genres", "tags"]
 
 
