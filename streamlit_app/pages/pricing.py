@@ -156,10 +156,6 @@ def load_data():
         conn.close()
 
 
-    # =========================================================================
-    # CLEAN DATA TYPES
-    # =========================================================================
-
     gold = gold.astype(
         {
             "steam_id": "int64",
@@ -174,201 +170,74 @@ def load_data():
             "n_discount_events": "int64",
             "price_volatility": "int64",
             "n_price_changes": "int64",
-            "has_price_history": "bool"
+            "has_price_history": "bool",
+        }
+    ).dropna()
+
+    meta = meta.astype(
+        {
+            "app_id": "int64",
+            "name": "string",
+            "release_date": "datetime64[ns]",
+            "estimated_owners": "string",
         }
     )
 
+    # Merge price + metadata
+    price_df = meta.merge(gold, left_on="app_id", right_on="steam_id")
 
-    meta["app_id"] = pd.to_numeric(
-        meta["app_id"],
-        errors="coerce"
-    )
+    # Remove free games
+    price_df = price_df[price_df["launch_price"] != 0].copy()
 
+    # Remove raw list columns
+    price_df = price_df.drop(columns=RAW_LIST_COLS, errors="ignore")
 
-    meta = meta.dropna(
-        subset=["app_id"]
-    )
+    # Genre dummy columns
+    genre_dummy_cols = [c for c in price_df.columns if c.startswith("genres_")]
 
+    # Review ratio
+    price_df["review_ratio"] = price_df["positive"] / (price_df["positive"] + price_df["negative"]).replace(0, np.nan)
 
-    meta["app_id"] = (
-        meta["app_id"]
-        .astype("int64")
-    )
-
-
-    if "name" in meta.columns:
-
-        meta["name"] = (
-            meta["name"]
-            .astype("string")
-        )
-
-
-    if "release_date" in meta.columns:
-
-        meta["release_date"] = pd.to_datetime(
-            meta["release_date"],
-            errors="coerce"
-        )
-
-
-    if "estimated_owners" in meta.columns:
-
-        meta["estimated_owners"] = (
-            meta["estimated_owners"]
-            .astype("string")
-        )
-
-
-    # =========================================================================
-    # MERGE PRICE + METADATA
-    # =========================================================================
-
-    price_df = meta.merge(
-        gold,
-        left_on="app_id",
-        right_on="steam_id",
-        how="inner",
-        suffixes=("_meta", "_price")
-    )
-
-
-    # =========================================================================
-    # FIX DUPLICATE COLUMN NAMES IF BOTH TABLES CONTAIN SAME COLUMN
-    # =========================================================================
-
-    required_metadata_columns = [
+    # Features
+    scope = [
+        "platform_count",
+        "supported_languages_count",
+        "audio_languages_count",
+        "category_count",
+        "genre_count",
+        "tag_count",
+        "total_tag_votes",
+        "tag_diversity",
         "dlc_count",
         "achievements",
-        "platform_count"
     ]
 
-
-    for feature in required_metadata_columns:
-
-        meta_version = (
-            f"{feature}_meta"
-        )
-
-        price_version = (
-            f"{feature}_price"
-        )
-
-
-        # Prefer metadata version
-        if meta_version in price_df.columns:
-
-            price_df[feature] = (
-                price_df[meta_version]
-            )
-
-
-        # Otherwise use price table version
-        elif price_version in price_df.columns:
-
-            price_df[feature] = (
-                price_df[price_version]
-            )
-
-
-    # =========================================================================
-    # CHECK REQUIRED COLUMNS
-    # =========================================================================
-
-    required_columns = [
-        "launch_price",
-        "dlc_count",
-        "achievements",
-        "platform_count"
+    control = [
+        "positive",
+        "negative",
+        "average_playtime_forever",
+        "median_playtime_forever",
+        "peak_ccu",
+        "recommendations",
+        "days_since_release",
     ]
 
+    feature_names = scope + control + genre_dummy_cols + ["review_ratio"]
 
-    missing_columns = [
-        column
-        for column in required_columns
-        if column not in price_df.columns
-    ]
+    # Remove rows with missing model features
+    price_df = price_df.dropna(subset=feature_names + ["launch_price"])
 
+    X = price_df[feature_names]
+    y = price_df["launch_price"]
 
-    if missing_columns:
-
-        st.error(
-            "Damien's Streamlit page is missing these "
-            f"required columns: {missing_columns}"
-        )
-
-        st.write(
-            "Columns currently loaded:"
-        )
-
-        st.write(
-            price_df.columns.tolist()
-        )
-
-        st.stop()
-
-
-    # =========================================================================
-    # NUMERIC CLEANING
-    # =========================================================================
-
-    for column in [
-        "launch_price",
-        "dlc_count",
-        "achievements",
-        "platform_count"
-    ]:
-
-        price_df[column] = pd.to_numeric(
-            price_df[column],
-            errors="coerce"
-        )
-
-
-    # Remove rows missing essential values
-    price_df = price_df.dropna(
-        subset=[
-            "launch_price",
-            "dlc_count",
-            "achievements",
-            "platform_count"
-        ]
-    )
-
-
-    # =========================================================================
-    # REMOVE FREE GAMES
-    # =========================================================================
-
-    price_df = price_df[
-        price_df["launch_price"] != 0
-    ].copy()
-
-
-    # =========================================================================
-    # REMOVE RAW LIST COLUMNS
-    # =========================================================================
-
-    price_df = price_df.drop(
-        columns=RAW_LIST_COLS,
-        errors="ignore"
-    )
-
-
-    # =========================================================================
-    # FIND GENRE DUMMY COLUMNS
-    # =========================================================================
-
-    genre_dummy_cols = [
-        column
-        for column in price_df.columns
-        if column.startswith("genres_")
-    ]
-
+    _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     return (
         price_df,
-        genre_dummy_cols
+        X_test,
+        y_test,
+        feature_names,
+        genre_dummy_cols,
     )
 
 
@@ -376,7 +245,7 @@ def load_data():
 # LOAD DATA
 # =============================================================================
 
-price_df, genre_dummy_cols = load_data()
+price_df, X_test, y_test, feature_names, genre_dummy_cols = load_data()
 
 
 # Temporary debugging
